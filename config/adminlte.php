@@ -305,18 +305,42 @@ return [
             'icon' => 'fas fa-fw fa-home',
         ],
         [
-            'text' => 'users',
-            'url' => 'admin/users',
-            'icon' => 'far fa-fw fa-user',
-            'can' => 'is-admin',
+            'text' => 'Таблица кэшбэка',
+            'url' => 'admin/cashback',
+            'icon' => 'fas fa-fw fa-coins',
         ],
-
-//        ['header' => 'account_settings'],
-//        [
-//            'text' => 'profile',
-//            'url' => 'admin/profile',
-//            'icon' => 'fas fa-fw fa-user',
-//        ],
+        [
+            'text' => 'Ваши карты',
+            'url' => 'admin/cards',
+            'icon' => 'fas fa-fw fa-credit-card',
+        ],
+        [
+            'text' => 'Банки',
+            'url' => 'admin/banks',
+            'icon' => 'fas fa-fw fa-university',
+        ],
+        [
+            'text' => 'Категории',
+            'url' => 'admin/categories',
+            'icon' => 'fas fa-fw fa-list',
+        ],
+        [
+            'text' => 'Прочее',
+            'can' => 'is-admin',
+            'icon' => 'fas fa-fw fa-bars',
+            'submenu' => [
+                [
+                    'text' => 'Пользователи',
+                    'icon' => 'fas fa-fw fa-user',
+                    'url' => 'admin/users',
+                ],
+                [
+                    'text' => 'Предложения',
+                    'icon' => 'fas fa-fw fa-comment',
+                    'url' => 'admin/feedback',
+                ],
+            ],
+        ]
     ],
 
     /*
