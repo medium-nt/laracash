@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Bank;
+use App\Models\Card;
 use App\Models\Category;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -36,6 +37,21 @@ Route::prefix('admin')->middleware('auth')->group(function () {
             ->can('delete', 'category')->name('categories.destroy');
 
         Route::get('/fill', [App\Http\Controllers\CategoryController::class, 'fillInDefaultValues'])->name('categories.fill_default');
+    });
+
+    Route::prefix('/cards')->group(function () {
+        Route::get('', [App\Http\Controllers\CardController::class, 'index'])
+            ->can('viewAny', Card::class)->name('cards.index');
+        Route::get('/create', [App\Http\Controllers\CardController::class, 'create'])
+            ->can('create', Card::class)->name('cards.create');
+        Route::post('', [App\Http\Controllers\CardController::class, 'store'])
+            ->can('create', Card::class)->name('cards.store');
+        Route::get('/{card}/edit', [App\Http\Controllers\CardController::class, 'edit'])
+            ->can('update', 'card')->name('cards.edit');
+        Route::put('/update/{card}', [App\Http\Controllers\CardController::class, 'update'])
+            ->can('update', 'card')->name('cards.update');
+        Route::delete('/{card}', [App\Http\Controllers\CardController::class, 'destroy'])
+            ->can('delete', 'card')->name('cards.destroy');
     });
 
     Route::prefix('/banks')->group(function () {
