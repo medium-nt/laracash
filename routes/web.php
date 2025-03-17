@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Bank;
 use App\Models\Category;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +36,21 @@ Route::prefix('admin')->middleware('auth')->group(function () {
             ->can('delete', 'category')->name('categories.destroy');
 
         Route::get('/fill', [App\Http\Controllers\CategoryController::class, 'fillInDefaultValues'])->name('categories.fill_default');
+    });
+
+    Route::prefix('/banks')->group(function () {
+        Route::get('', [App\Http\Controllers\BankController::class, 'index'])
+            ->can('viewAny', Bank::class)->name('banks.index');
+        Route::get('/create', [App\Http\Controllers\BankController::class, 'create'])
+            ->can('create', Bank::class)->name('banks.create');
+        Route::post('', [App\Http\Controllers\BankController::class, 'store'])
+            ->can('create', Bank::class)->name('banks.store');
+        Route::get('/{bank}/edit', [App\Http\Controllers\BankController::class, 'edit'])
+            ->can('update', 'bank')->name('banks.edit');
+        Route::put('/update/{bank}', [App\Http\Controllers\BankController::class, 'update'])
+            ->can('update', 'bank')->name('banks.update');
+        Route::delete('/{bank}', [App\Http\Controllers\BankController::class, 'destroy'])
+            ->can('delete', 'bank')->name('banks.destroy');
     });
 
     Route::prefix('/users')->group(function () {
