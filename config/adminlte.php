@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'title' => 'My Site',
+    'title' => 'CashBack',
     'title_prefix' => '',
     'title_postfix' => '',
 
