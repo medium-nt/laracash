@@ -1,5 +1,5 @@
 @setup
-    $user = 'fh791290';
+    $user = 'fh791290_laracash';
     $server = 'fh791290.beget.tech';
 @endsetup
 
