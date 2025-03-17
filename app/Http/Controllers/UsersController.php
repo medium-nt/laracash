@@ -13,7 +13,7 @@ class UsersController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(): View
     {
         $this->authorize('viewAny', User::class);
 
@@ -27,7 +27,7 @@ class UsersController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function create(): View
     {
         return view('users.create', [
             'title' => 'Добавить пользователя',
@@ -46,21 +46,13 @@ class UsersController extends Controller
     }
 
     /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
      * Show the form for editing the specified resource.
      */
     public function edit(User $user): View
     {
         return view('users.edit', [
             'title' => 'Изменить пользователя',
-            'user' => User::query()->findOrFail($user->id),
+            'user' => $user,
         ]);
     }
 
@@ -84,7 +76,7 @@ class UsersController extends Controller
         return redirect()->route('users.index')->with('success', 'Пользователь удален');
     }
 
-    public function profile()
+    public function profile(): View
     {
         return view('users.profile', [
             'title' => 'Профиль',
@@ -92,9 +84,11 @@ class UsersController extends Controller
         ]);
     }
 
-    public function profileUpdate(Request $request)
+    public function profileUpdate(Request $request): RedirectResponse
     {
-        $this->saved($request, auth()->user());
+        /** @var User $user */
+        $user = auth()->user();
+        $this->saved($request, $user);
 
         return redirect()->route('profile')->with('success', 'Изменения сохранены.');
     }
@@ -113,7 +107,6 @@ class UsersController extends Controller
         $validatedData = $request->validate($rules);
         $user->update($validatedData);
 
-        // Проверяем, был ли передан пароль, и если да, то сохраняем его
         if ($request->filled('password')) {
             $user->password = bcrypt($validatedData['password']);
             $user->save();

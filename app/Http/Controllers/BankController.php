@@ -56,7 +56,7 @@ class BankController extends Controller
     {
         return view('banks.edit', [
             'title' => 'Изменить банк',
-            'bank' => Bank::query()->findOrFail($bank->id),
+            'bank' => $bank,
         ]);
     }
 
