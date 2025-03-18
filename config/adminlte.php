@@ -306,22 +306,22 @@ return [
         ],
         [
             'text' => 'Таблица кэшбэка',
-            'url' => 'admin/cashback',
+            'url' => 'cashback',
             'icon' => 'fas fa-fw fa-coins',
         ],
         [
             'text' => 'Ваши карты',
-            'url' => 'admin/cards',
+            'url' => 'cards',
             'icon' => 'fas fa-fw fa-credit-card',
         ],
         [
             'text' => 'Банки',
-            'url' => 'admin/banks',
+            'url' => 'banks',
             'icon' => 'fas fa-fw fa-university',
         ],
         [
             'text' => 'Категории',
-            'url' => 'admin/categories',
+            'url' => 'categories',
             'icon' => 'fas fa-fw fa-list',
         ],
         [
@@ -332,12 +332,12 @@ return [
                 [
                     'text' => 'Пользователи',
                     'icon' => 'fas fa-fw fa-user',
-                    'url' => 'admin/users',
+                    'url' => 'users',
                 ],
                 [
                     'text' => 'Предложения',
                     'icon' => 'fas fa-fw fa-comment',
-                    'url' => 'admin/feedback',
+                    'url' => 'feedback',
                 ],
             ],
         ]

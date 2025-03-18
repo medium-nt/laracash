@@ -15,7 +15,7 @@ Auth::routes();
 
 Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
-Route::prefix('admin')->middleware('auth')->group(function () {
+Route::prefix('')->middleware('auth')->group(function () {
 
     Route::prefix('/profile')->group(function () {
         Route::get('', [App\Http\Controllers\UsersController::class, 'profile'])->name('profile');
