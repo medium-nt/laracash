@@ -10,7 +10,7 @@
 @section('content_body')
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header">
+            <div class="card-body">
                 <table class="table table-hover table-bordered">
                     <thead class="thead-dark">
                         <tr>
