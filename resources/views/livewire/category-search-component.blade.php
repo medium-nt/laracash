@@ -4,7 +4,7 @@
 
     <div class="form-group row">
         <div class="col-md-6">
-            <input type="text" wire:model.live="search" class="form-control" placeholder="Поиск по названию категории...">
+            <input type="text" wire:model.live="search" id="searchInput" class="form-control" placeholder="Поиск по названию категории...">
         </div>
     </div>
 
@@ -30,13 +30,10 @@
             @if ($filteredProducts->count())
             @foreach($filteredProducts as $category)
                 <tr>
-                    <th style="width: 50px"
-                        class="edit_category {{$category->id}}"
-                        data-toggle='modal' data-target='#modal'
-                        scope="row">{{$loop->iteration}}</th>
-                    <td class="edit_category {{$category->id}}"
-                        data-toggle='modal'
-                        data-target='#modal'>{{$category->title}}</td>
+                    <th style="width: 50px" scope="row">{{$loop->iteration}}</th>
+                    <td>
+                        <a href="{{ route('cashback.category_show', ['category' => $category->id]) }}">{{$category->title}}</a>
+                    </td>
                     <td class="edit_category {{$category->id}}"
                         data-toggle='modal'
                         data-target='#modal'>{{$category->keywords}}</td>

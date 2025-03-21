@@ -2,6 +2,7 @@
 
 use App\Models\Bank;
 use App\Models\Card;
+use App\Models\Cashback;
 use App\Models\Category;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -52,6 +53,22 @@ Route::prefix('')->middleware('auth')->group(function () {
             ->can('update', 'card')->name('cards.update');
         Route::delete('/{card}', [App\Http\Controllers\CardController::class, 'destroy'])
             ->can('delete', 'card')->name('cards.destroy');
+    });
+
+    Route::prefix('/cashback')->group(function () {
+        Route::get('', [App\Http\Controllers\CashbackController::class, 'index'])
+            ->can('viewAny', Cashback::class)->name('cashback.index');
+
+        Route::get('/category/{category}/show', [App\Http\Controllers\CashbackController::class, 'categoryShow'])
+            ->can('view', 'category')->name('cashback.category_show');
+
+        Route::get('/card/{card}/edit', [App\Http\Controllers\CashbackController::class, 'cardEdit'])
+            ->can('update', 'card')
+            ->name('cashback.card_edit');
+
+        Route::put('/update/{card}', [App\Http\Controllers\CashbackController::class, 'cardUpdate'])
+            ->can('update', 'card')
+            ->name('cashback.card_update');
     });
 
     Route::prefix('/banks')->group(function () {
