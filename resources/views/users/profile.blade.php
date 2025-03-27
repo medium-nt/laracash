@@ -43,6 +43,20 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="search_token">Персональная ссылка</label>
+                        @if($user->search_token)
+                            <a href=" {{ route('search.index', ['token' => $user->search_token]) }}"
+                               target="_blank"><small class="ml-1"><u>перейти</u></small></a>
+                        @endif
+                        <input type="text" class="form-control" id="search_token" value="{{ $user->search_token }}"
+                               name="search_token" placeholder="" readonly>
+                        <a href="{{ route('profile.generate_search_token') }}" class="generate_code"
+                           onclick="return confirm('Вы уверены, что хотите сгенерировать новый код персональной ссылки? Обратите внимание, что ссылки со старым кодом станут нерабочими.')">
+                            <small class="ml-1"><u>сгенерировать новую</u></small>
+                        </a>
+                    </div>
+
+                    <div class="form-group">
                         <label for="password">Новый пароль</label>
                         <input type="password" class="form-control" id="password" name="password"
                                placeholder="Пароль">
@@ -62,16 +76,3 @@
         </div>
     </div>
 @stop
-
-{{-- Push extra CSS --}}
-
-@push('css')
-    {{-- Add here extra stylesheets --}}
-    {{-- <link rel="stylesheet" href="/css/admin_custom.css"> --}}
-@endpush
-
-{{-- Push extra scripts --}}
-
-@push('js')
-{{--    <script> console.log("Hi, I'm using the Laravel-AdminLTE package!"); </script>--}}
-@endpush

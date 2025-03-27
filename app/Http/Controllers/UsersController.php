@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class UsersController extends Controller
 {
@@ -91,6 +92,15 @@ class UsersController extends Controller
         $this->saved($request, $user);
 
         return redirect()->route('profile')->with('success', 'Изменения сохранены.');
+    }
+
+    public function generateSearchToken(): RedirectResponse
+    {
+        $user = auth()->user();
+        $user->search_token = Str::random();
+        $user->save();
+
+        return redirect()->route('profile')->with('success', 'Новый код персональной ссылки сгенерирован.');
     }
 
     private function saved(Request $request, User $user): void

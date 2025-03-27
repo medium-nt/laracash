@@ -20,6 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('role_id')->default(1)->nullable();
             $table->foreign('role_id')->references('id')->on('roles')->onDelete('set null');
             $table->index('role_id');
+            $table->string('search_token', 255)->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

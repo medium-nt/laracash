@@ -11,7 +11,7 @@
     <div class="col-md-12">
         @if($cashbackTable == null)
             <div class="alert alert-danger">
-                Сначала добавьте карты.
+                Сначала добавьте Карты и Категории.
             </div>
         @else
             <div class="card">

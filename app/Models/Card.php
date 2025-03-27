@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Card extends Model
 {
@@ -21,5 +22,10 @@ class Card extends Model
     {
         return $this->belongsToMany(Category::class, 'card_category_cashback', 'card_id', 'category_id')
             ->withPivot('cashback_percentage', 'mcc', 'updated_at');
+    }
+
+    public function cashbacks(): HasMany|Card
+    {
+        return $this->hasMany(Cashback::class, 'card_id', 'id');
     }
 }

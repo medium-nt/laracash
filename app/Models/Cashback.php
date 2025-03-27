@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Cashback extends Model
 {
-    /** @use HasFactory<\Database\Factories\CashbackFactory> */
-    use HasFactory;
+//    /** @use HasFactory<\Database\Factories\CashbackFactory> */
+//    use HasFactory;
 
     protected $table = 'card_category_cashback';
 
@@ -23,5 +23,10 @@ class Cashback extends Model
     public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    public function card(): BelongsTo
+    {
+        return $this->belongsTo(Card::class , 'card_id', 'id');
     }
 }

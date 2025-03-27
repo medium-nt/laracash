@@ -9,18 +9,22 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    return view('landing');
 });
 
 Auth::routes();
 
 Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
+Route::get('/search/{token}/{category?}/{mcc?}', [App\Http\Controllers\SearchController::class, 'index'])->name('search.index');
+
 Route::prefix('')->middleware('auth')->group(function () {
 
     Route::prefix('/profile')->group(function () {
         Route::get('', [App\Http\Controllers\UsersController::class, 'profile'])->name('profile');
         Route::put('', [App\Http\Controllers\UsersController::class, 'profileUpdate'])->name('profile.update');
+        Route::get('/generate_search_token', [App\Http\Controllers\UsersController::class, 'generateSearchToken'])
+            ->name('profile.generate_search_token');
     });
 
     Route::prefix('/categories')->group(function () {
