@@ -16,9 +16,10 @@ Auth::routes();
 
 Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 
-Route::get('/search/{token}/{category?}/{mcc?}', [App\Http\Controllers\SearchController::class, 'index'])->name('search.index');
+Route::get('/search/{token}', [App\Http\Controllers\SearchController::class, 'index'])
+    ->name('search.index');
 
-Route::prefix('')->middleware('auth')->group(function () {
+Route::middleware('auth')->group(function () {
 
     Route::prefix('/profile')->group(function () {
         Route::get('', [App\Http\Controllers\UsersController::class, 'profile'])->name('profile');
@@ -41,7 +42,8 @@ Route::prefix('')->middleware('auth')->group(function () {
         Route::delete('/{category}', [App\Http\Controllers\CategoryController::class, 'destroy'])
             ->can('delete', 'category')->name('categories.destroy');
 
-        Route::get('/fill', [App\Http\Controllers\CategoryController::class, 'fillInDefaultValues'])->name('categories.fill_default');
+        Route::get('/fill', [App\Http\Controllers\CategoryController::class, 'fillInDefaultValues'])
+            ->name('categories.fill_default');
     });
 
     Route::prefix('/cards')->group(function () {

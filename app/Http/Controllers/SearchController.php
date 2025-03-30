@@ -2,23 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\CashbackService;
+use App\Models\User;
 
 class SearchController extends Controller
 {
-    public function index($token, $category = null, $mcc = null)
+    public function index($token)
     {
-        $user = auth()->user();
-
-        if ($user->search_token !== $token) {
+        $user = User::query()->where('search_token', $token)->first();
+        if (!$user) {
             abort(401, 'Неверный код клиента!');
         }
 
         return view('search.index', [
-            'category' => $category,
-            'mcc' => $mcc,
-            'token' => $user->search_token,
-            'categoriesCashback' => CashbackService::getAllCardWhichHavePercent($user->id, $category, $mcc)
+            'user' => $user,
         ]);
     }
 }
