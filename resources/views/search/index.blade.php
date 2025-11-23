@@ -5,16 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <link rel="apple-touch-icon" href="/public/images/logo_cashback.png">
-    <link rel="apple-touch-startup-image" href="/public/images/logo_cashback.png">
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
 
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Твой кешбек">
 
     <meta name="mobile-web-app-capable" content="yes">
-    <link rel="shortcut icon" href="/public/images/logo_cashback.png">
-    <link rel="icon" sizes="192x192" href="/public/images/logo_cashback.png">
-    <link rel="icon" sizes="128x128" href="/public/images/logo_cashback.png">
 
     <title>Твой кешбек</title>
 

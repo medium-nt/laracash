@@ -63,12 +63,12 @@ return [
     |
     */
 
-    'logo' => '<b>Test</b>CRM',
-    'logo_img' => 'vendor/adminlte/dist/img/crm_logo.png',
+    'logo' => '<b>Cashback</b>',
+    'logo_img' => 'favicon.png',
     'logo_img_class' => 'brand-image img-circle elevation-3',
     'logo_img_xl' => null,
     'logo_img_xl_class' => 'brand-image-xs',
-    'logo_img_alt' => 'Admin Logo',
+    'logo_img_alt' => 'Cashback',
 
     /*
     |--------------------------------------------------------------------------
