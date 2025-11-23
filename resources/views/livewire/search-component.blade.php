@@ -48,8 +48,12 @@
                                         </span>
 
                                         @if($card->mcc != '')
-                                            <i class="mcc {{$card->id}} fas fa-exclamation-circle" style="color: #007bff;"
-                                               data-toggle='modal' data-target='#modal'></i>
+                                            <i class="mcc {{$card->id}} fas fa-exclamation-circle"
+                                               style="color: #007bff;"
+                                               data-toggle='modal'
+                                               data-target='#modal'
+                                               data-mcc='{{ $card->mcc }}'
+                                            ></i>
                                         @endif
                                     </td>
                                     <td style="width: 100px">{{ $card->cashback_percentage }}%</td>

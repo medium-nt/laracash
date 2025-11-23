@@ -91,6 +91,18 @@
     @livewire('search-component', [
             'user' => $user
     ])
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        $('#modal').on('show.bs.modal', function (event) {
+            let button = $(event.relatedTarget);
+            let note = button.data('mcc');
+            let modal = $(this);
+            modal.find('.modal-div').text(note);
+        });
+    });
+
+</script>
 </body>
 </html>
 
