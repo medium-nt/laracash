@@ -17,6 +17,9 @@ return new class extends Migration
             $table->unsignedBigInteger('bank_id');
             $table->string('number', 30);
             $table->string('color', 10);
+            $table->string('cashback_image')
+                ->default('');
+            $table->json('cashback_json')->default('[]');
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('bank_id')->references('id')->on('banks')->onDelete('cascade');
         });

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\FileUploadController;
 use App\Models\Bank;
 use App\Models\Card;
 use App\Models\Cashback;
@@ -18,6 +19,8 @@ Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name
 
 Route::get('/search/{token}', [App\Http\Controllers\SearchController::class, 'index'])
     ->name('search.index');
+
+Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
 Route::middleware('auth')->group(function () {
 
@@ -75,6 +78,18 @@ Route::middleware('auth')->group(function () {
         Route::put('/update/{card}', [App\Http\Controllers\CashbackController::class, 'cardUpdate'])
             ->can('update', 'card')
             ->name('cashback.card_update');
+
+        Route::put('/upload/{card}', [App\Http\Controllers\CashbackController::class, 'downloadCashbackImage'])
+            ->can('update', 'card')
+            ->name('cashback.download_cashback_image');
+
+        Route::delete('/delete_cashback_image/{card}', [App\Http\Controllers\CashbackController::class, 'destroyCashbackImage'])
+            ->can('delete', 'card')
+            ->name('cashback.delete_cashback_image');
+
+        Route::get('/recognize/{card}', [App\Http\Controllers\CashbackController::class, 'recognizeCashback'])
+            ->can('create', 'card')
+            ->name('cashback.recognize_cashback');
     });
 
     Route::prefix('/banks')->group(function () {

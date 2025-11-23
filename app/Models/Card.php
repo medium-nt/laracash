@@ -9,9 +9,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Card extends Model
 {
-    protected $fillable = ['user_id', 'bank_id', 'number', 'color'];
+    protected $fillable = [
+        'user_id',
+        'bank_id',
+        'number',
+        'color',
+        'cashback_image',
+        'cashback_json'
+    ];
 
     public $timestamps = false;
+
+    protected $casts = [
+        'cashback_json' => 'array',
+    ];
 
     public function bank(): BelongsTo
     {
