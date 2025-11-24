@@ -19,7 +19,7 @@ return new class extends Migration
             $table->string('color', 10);
             $table->string('cashback_image')
                 ->default('');
-            $table->json('cashback_json')->default('[]');
+            $table->json('cashback_json')->nullable();
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->foreign('bank_id')->references('id')->on('banks')->onDelete('cascade');
         });
