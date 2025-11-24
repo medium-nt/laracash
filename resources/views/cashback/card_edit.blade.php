@@ -149,10 +149,12 @@
                             @endforeach
                         </ul>
                     @else
-                        <a href="{{ route('cashback.recognize_cashback', ['card' => $card->id]) }}"
-                           class="btn btn-sm btn-primary">
-                            Распознать
-                        </a>
+                        @if($card->cashback_image)
+                            <a href="{{ route('cashback.recognize_cashback', ['card' => $card->id]) }}"
+                               class="btn btn-sm btn-primary">
+                                Распознать
+                            </a>
+                        @endif
                     @endif
                 </div>
             </div>
