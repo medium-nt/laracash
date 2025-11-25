@@ -135,7 +135,7 @@
                         @method('PUT')
                         <div class="form-group">
                             <label for="image">Загрузить новый скриншот кешбэка</label>
-                            <input type="file" class="form-control" id="image" name="image">
+                            <input type="file" class="form-control" id="image" name="image" required>
                         </div>
                         <button type="submit" class="btn btn-success">Загрузить</button>
                     </form>
