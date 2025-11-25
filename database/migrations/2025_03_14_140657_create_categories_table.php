@@ -16,6 +16,7 @@ return new class extends Migration
             $table->integer('user_id');
             $table->string('title', 255);
             $table->text('keywords');
+            $table->boolean('is_important')->default(false);
         });
     }
 

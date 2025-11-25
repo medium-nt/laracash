@@ -17,6 +17,7 @@ class CardSeeder extends Seeder
             'bank_id' => '1',
             'number' => '*1234',
             'color' => '#00b30c',
+            'number_categories' => 4
         ]);
 
         Card::query()->create([
@@ -24,6 +25,7 @@ class CardSeeder extends Seeder
             'bank_id' => '2',
             'number' => '*9876',
             'color' => '#d21e1e',
+            'number_categories' => 5
         ]);
 
         Card::query()->create([
@@ -31,6 +33,7 @@ class CardSeeder extends Seeder
             'bank_id' => '3',
             'number' => '*5555',
             'color' => '#007bff',
+            'number_categories' => 3
         ]);
     }
 }

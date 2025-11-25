@@ -17,6 +17,7 @@ return new class extends Migration
             $table->unsignedBigInteger('bank_id');
             $table->string('number', 30);
             $table->string('color', 10);
+            $table->tinyInteger('number_categories')->default(0);
             $table->string('cashback_image')
                 ->default('');
             $table->json('cashback_json')->nullable();
