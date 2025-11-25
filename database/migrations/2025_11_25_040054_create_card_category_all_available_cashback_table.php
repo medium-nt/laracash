@@ -37,6 +37,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('card_category_cashback');
+        Schema::dropIfExists('card_category_all_available_cashback');
     }
 };
