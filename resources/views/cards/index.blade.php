@@ -9,6 +9,11 @@
 
 @section('content_body')
     <div class="col-md-12">
+        @if($banks_is_empty)
+            <div class="alert alert-danger">
+                Сначала добавьте хотя бы один Банк.
+            </div>
+        @else
         <div class="card">
             <div class="card-body">
 
@@ -57,5 +62,6 @@
 
             </div>
         </div>
+        @endif
     </div>
 @stop

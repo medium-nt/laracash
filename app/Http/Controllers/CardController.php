@@ -18,6 +18,7 @@ class CardController extends Controller
         return view('cards.index', [
             'title' => 'Карты',
             'cards' => Card::query()->where('user_id', auth()->user()->id)->paginate(10),
+            'banks_is_empty' => Bank::query()->where('user_id', auth()->user()->id)->doesntExist(),
         ]);
     }
 
