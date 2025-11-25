@@ -1,23 +1,9 @@
 @extends('layouts.app')
 
-{{-- Customize layout sections --}}
-
 @section('subtitle', 'Welcome')
 @section('content_header_title', 'Welcome')
 
-{{-- Content body: main page content --}}
-
 @section('content_body')
-    <div class="alert alert-danger alert-dismissible">
-        <h5><i class="icon fas fa-exclamation-triangle"></i>Обновление!</h5>
-        <br>
-        <p>
-            Был изменен формат ссылок в системе. Необходимо сменить ярлык персональной ссылки, котрой вы пользуетесь.
-            Новую ссылку вы можете получить в <a href="/profile">Профиле</a>
-        </p>
-    </div>
-
-
     <div class="card">
         <div class="card-header">
             <h5 class="card-title"><b>Как пользоваться сайтом?</b></h5>
