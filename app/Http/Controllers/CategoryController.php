@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Services\CategoryService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -86,12 +87,12 @@ class CategoryController extends Controller
         return redirect()->route('categories.index')->with('success', 'Категория удалена');
     }
 
-    public function fillInDefaultValues(): RedirectResponse
+    public function fillInDefaultValues(CategoryService $categoryService): RedirectResponse
     {
         if(Category::query()->where('user_id', auth()->user()->id)->count() > 0) {
             $message = ['error' => 'Значения по умолчанию уже заполнены'];
         } else {
-            Category::fillInDefaultValues();
+            $categoryService->fillInDefaultValues();
             $message = ['success' => 'Значения по умолчанию заполнены'];
         }
 
