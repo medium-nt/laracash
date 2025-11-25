@@ -26,8 +26,9 @@ class CashbackService
                 $cashback = Cashback::query()
                     ->where('card_id', $card->id)
                     ->where('category_id', $category->id)
-                    ->first('cashback_percentage');
+                    ->first();
                 $matrix[$category->id][$card->id]['percent'] = $cashback->cashback_percentage ?? '-';
+                $matrix[$category->id][$card->id]['mcc'] = $cashback->mcc ?? '';
             }
         }
 

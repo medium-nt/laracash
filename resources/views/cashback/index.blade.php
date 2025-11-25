@@ -50,7 +50,12 @@
                                             @if ($card['percent'] == '-' || $card['percent'] == 0)
                                                 -
                                             @else
-                                                {{ $card['percent'] }} %
+                                                <b>{{ $card['percent'] }} %  </b>
+                                                @if($card['mcc'] != '')
+                                                <small class="d-block d-sm-inline">
+                                                    <i>{{ $card['mcc'] }}</i>
+                                                </small>
+                                                @endif
                                             @endif
                                         </td>
                                     @endif
