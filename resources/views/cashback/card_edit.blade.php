@@ -116,7 +116,9 @@
                 <div class="card-body">
                     @if($card->cashback_image)
                     <img src="{{ asset('storage/card_cashback_image/' . $card->cashback_image ?? '') }}"
-                         alt="Картинка кешбэка" style="max-width: 50%; max-height: 50%;">
+                         alt="Картинка кешбэка"
+                         style="max-width: 50%; max-height: 50%;"
+                         data-toggle="modal" data-target="#cashbackModal">
 
                         <form action="{{ route('cashback.delete_cashback_image', ['card' => $card->id]) }}" method="post">
                             @csrf
@@ -160,6 +162,27 @@
             </div>
         </div>
     </div>
+
+    <!-- Модальное окно -->
+    <div class="modal fade" id="cashbackModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content bg-white">
+                <!-- Кнопка закрытия -->
+                <div class="modal-header border-0">
+                    <button type="button" class="close text-danger" data-dismiss="modal" aria-label="Закрыть">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body text-center">
+                    <img src="{{ asset('storage/card_cashback_image/' . $card->cashback_image ?? '') }}"
+                         alt="Картинка кешбэка"
+                         style="max-width: 100%; height: auto;">
+                </div>
+            </div>
+        </div>
+    </div>
+
 @stop
 
 {{-- Push extra scripts --}}

@@ -43,7 +43,12 @@
                             @foreach($cardList as $card)
                                 <tr class="topic-item-1">
                                     <td>
-                                        <span class="badge" style="background-color: {{$card->card_color}}; color: white;">
+                                        <span class="badge"
+                                              style="background-color: {{$card->card_color}}; color: white;"
+                                              data-target="#cashbackModal"
+                                              data-card-id="{{ $card->card_id }}"
+                                              data-cashback-image="{{ $card->cashback_image }}"
+                                              data-toggle="modal">
                                             {{ $card->card_number }} {{ $card->bank_title }}
                                         </span>
 
@@ -84,4 +89,42 @@
             @endisset
         </div>
     </div>
+
+    <!-- Модальное окно -->
+    <div class="modal fade" id="cashbackModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content bg-white">
+                <!-- Кнопка закрытия -->
+                <div class="modal-header border-0">
+                    <button type="button" class="close text-danger" data-dismiss="modal" aria-label="Закрыть">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <!-- Тело модалки -->
+                <div class="modal-body text-center">
+                    <img id="modalImage" src="" alt="Скриншот кешбэка" style="max-width: 100%; height: auto;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $('#cashbackModal').on('show.bs.modal', function (event) {
+            var trigger = $(event.relatedTarget);
+            var cardId = trigger.data('card-id');
+            var src = trigger.data('cashback-image');
+            var imageSrc = '/storage/card_cashback_image/' + src;
+
+            var modal = $(this);
+            if (src === '') {
+                imageSrc = '';
+                modal.find('#modalImage').attr('alt', 'Скриншот карты не найден');
+                modal.find('#modalImage').attr('src', imageSrc);
+            } else {
+                modal.find('#modalCardId').text('ID карты: ' + cardId);
+                modal.find('#modalImage').attr('src', imageSrc);
+            }
+        });
+    </script>
+
 </div>

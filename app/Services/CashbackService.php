@@ -85,6 +85,7 @@ class CashbackService
             ->select([
                 'card_category_cashback.*',
                 'c.number as card_number',
+                'c.cashback_image as cashback_image',
                 'c.color as card_color',
                 'b.title as bank_title',
                 'ca.title as category_title',
