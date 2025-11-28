@@ -26,7 +26,12 @@ Route::get('/tg-app', function () {
     return view('tg-app');
 });
 
-Route::post('/telegram/webhook', [App\Http\Controllers\TelegramWebhookController::class, 'handle']);
+Route::prefix('api')
+    ->middleware('api')
+    ->group(function () {
+        Route::get('/test', fn() => 'ok');
+        Route::post('/telegram/webhook', [App\Http\Controllers\TelegramWebhookController::class, 'handle']);
+    });
 
 Route::middleware('auth')->group(function () {
 
@@ -53,6 +58,10 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/fill', [App\Http\Controllers\CategoryController::class, 'fillInDefaultValues'])
             ->name('categories.fill_default');
+
+        Route::post('/change_important', [App\Http\Controllers\CategoryController::class, 'changeImportant'])
+            ->can('viewAny', Card::class)
+            ->name('categories.change_important');
     });
 
     Route::prefix('/cards')->group(function () {
@@ -68,11 +77,28 @@ Route::middleware('auth')->group(function () {
             ->can('update', 'card')->name('cards.update');
         Route::delete('/{card}', [App\Http\Controllers\CardController::class, 'destroy'])
             ->can('delete', 'card')->name('cards.destroy');
+
+        Route::post('/number_update', [App\Http\Controllers\CardController::class, 'numberUpdate'])
+            ->can('viewAny', Card::class)
+            ->name('cards.number_update');
     });
 
     Route::prefix('/cashback')->group(function () {
         Route::get('', [App\Http\Controllers\CashbackController::class, 'index'])
-            ->can('viewAny', Cashback::class)->name('cashback.index');
+            ->can('viewAny', Cashback::class)
+            ->name('cashback.index');
+
+        Route::get('all_available_cashback', [App\Http\Controllers\CashbackController::class, 'allAvailableCashback'])
+            ->can('viewAny', Cashback::class)
+            ->name('cashback.all_available_cashback');
+
+        Route::post('/inline-update', [App\Http\Controllers\CashbackController::class, 'inlineUpdate'])
+            ->can('viewAny', Cashback::class)
+            ->name('cashback.inline_update');
+
+        Route::post('/toggle-pin', [App\Http\Controllers\CashbackController::class, 'togglePin'])
+            ->can('viewAny', Cashback::class)
+            ->name('cashback.toggle_pin');
 
         Route::get('/category/{category}/show', [App\Http\Controllers\CashbackController::class, 'categoryShow'])
             ->can('view', 'category')->name('cashback.category_show');
