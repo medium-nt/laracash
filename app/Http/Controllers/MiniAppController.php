@@ -9,51 +9,94 @@ class MiniAppController extends Controller
 {
     public function handle(Request $request)
     {
-        $data = $request->input('data');
-        $initData = $request->input('initData'); // передаём из JS
+        // 1) ВАЖНО: с клиента присылай именно Telegram.WebApp.initData
+        $initData = (string) $request->input('initData', '');
+        $data     = $request->input('data');
 
-        if (!$this->validateTelegramInitData($initData)) {
+        $isValid = $this->validateTelegramInitData($initData, config('tg.token'));
+
+        if (!$isValid) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         Log::info('Mini App data received:', ['data' => $data]);
 
-        // Тут можно слать данные дальше боту или в базу
+        // тут твоя логика (сохранение, связь с Telegram-аккаунтом и т.д.)
         return response()->json(['status' => 'ok']);
     }
 
-    private function validateTelegramInitData(string $initData): bool
+    /**
+     * Validates Telegram WebApp initData per official spec.
+     *
+     * @link https://core.telegram.org/bots/webapps#validating-data-received-via-the-web-app
+     */
+    private function validateTelegramInitData(string $initData, string $botToken): bool
     {
-        parse_str($initData, $params);
-
-        if (!isset($params['hash'])) {
+        if ($initData === '' || $botToken === '') {
             return false;
         }
 
-        $hash = $params['hash'];
+        // Разбираем оригинальные пары "key=value" без порчи формата
+        // parse_str превращает "+" в пробелы — это ломает подпись.
+        // Поэтому разбираем вручную.
+        $pairs = explode('&', $initData);
+        $params = [];
+        $hash = null;
 
-        Log::info('Mini App hash received:', ['hash' => $hash]);
+        foreach ($pairs as $pair) {
+            if ($pair === '') {
+                continue;
+            }
 
-        unset($params['hash']);
+            $eqPos = strpos($pair, '=');
+            if ($eqPos === false) {
+                // ключ без значения — пропускаем
+                continue;
+            }
 
-        // сортировка по ключу ASCII
+            $rawKey = substr($pair, 0, $eqPos);
+            $rawVal = substr($pair, $eqPos + 1);
+
+            // URL-decode по правилам Telegram (rawurldecode, чтобы "+" не превращался в пробел)
+            $key = rawurldecode($rawKey);
+            $val = rawurldecode($rawVal);
+
+            if ($key === 'hash') {
+                $hash = $val;
+                continue;
+            }
+
+            $params[$key] = $val;
+        }
+
+        if (!$hash) {
+            return false;
+        }
+
+        // Сортировка по ключу (ASCII)
         ksort($params);
 
-        $dataCheckArr = [];
-        foreach ($params as $key => $value) {
-            $dataCheckArr[] = "$key=$value";
+        // Формируем data_check_string в виде "key=value" на каждой строке
+        // Значения — уже URL-decoded (как требует спецификация).
+        $dataCheckLines = [];
+        foreach ($params as $k => $v) {
+            $dataCheckLines[] = $k . '=' . $v;
         }
-        $dataCheckString = implode("\n", $dataCheckArr);
+        $dataCheckString = implode("\n", $dataCheckLines);
 
-        // секретный ключ — sha256 от BOT_TOKEN (raw binary)
-        $botToken = config('tg.token');
+        // Секретный ключ — sha256(BOT_TOKEN) в бинарном виде
         $secretKey = hash('sha256', $botToken, true);
 
+        // Вычисляем HMAC-SHA256(data_check_string, secretKey) -> hex lower
         $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
-        Log::info($dataCheckString);
-        Log::info($calculatedHash);
+        // Для отладки:
+        Log::debug('initData params sorted', $params);
+        Log::debug('dataCheckString', ['s' => $dataCheckString]);
+        Log::debug('calculatedHash', ['h' => $calculatedHash]);
+        Log::debug('receivedHash', ['h' => $hash]);
 
+        // Сравниваем подписи
         return hash_equals($calculatedHash, $hash);
     }
 }

@@ -12,28 +12,46 @@
 <script>
     Telegram.WebApp.ready();
 
-    function sendData() {
-        const data = "Hello from Mini App!";
-
-        // Сначала отправляем на сервер через fetch
-        fetch('api/mini-app-data', {
+    async function sendToServer(payload) {
+        const res = await fetch('https://laracash.test66.ru/api/mini-app-data', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': '{{ csrf_token() }}' // если CSRF включён
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                data,
-                initData: Telegram.WebApp.initData
+                initData: Telegram.WebApp.initData, // строка от Telegram
+                data: payload                      // произвольные данные
             })
-        })
-            .then(res => res.json())
-            .then(res => console.log('Server response:', res))
-            .catch(err => console.error(err));
-
-        // Можно также отправить данные боту через Telegram, если нужно
-        Telegram.WebApp.sendData(data);
+        });
+        const json = await res.json();
+        console.log(json);
     }
 </script>
+
+
+{{--<script>--}}
+{{--    Telegram.WebApp.ready();--}}
+
+{{--    function sendData() {--}}
+{{--        const data = "Hello from Mini App!";--}}
+
+{{--        // Сначала отправляем на сервер через fetch--}}
+{{--        fetch('api/mini-app-data', {--}}
+{{--            method: 'POST',--}}
+{{--            headers: {--}}
+{{--                'Content-Type': 'application/json',--}}
+{{--                'X-CSRF-TOKEN': '{{ csrf_token() }}' // если CSRF включён--}}
+{{--            },--}}
+{{--            body: JSON.stringify({--}}
+{{--                data,--}}
+{{--                initData: Telegram.WebApp.initData--}}
+{{--            })--}}
+{{--        })--}}
+{{--            .then(res => res.json())--}}
+{{--            .then(res => console.log('Server response:', res))--}}
+{{--            .catch(err => console.error(err));--}}
+
+{{--        // Можно также отправить данные боту через Telegram, если нужно--}}
+{{--        Telegram.WebApp.sendData(data);--}}
+{{--    }--}}
+{{--</script>--}}
 </body>
 </html>
