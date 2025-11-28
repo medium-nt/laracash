@@ -26,6 +26,8 @@ Route::get('/tg-app', function () {
     return view('tg-app');
 });
 
+Route::post('/telegram/webhook', [App\Http\Controllers\TelegramWebhookController::class, 'handle']);
+
 Route::middleware('auth')->group(function () {
 
     Route::prefix('/profile')->group(function () {
