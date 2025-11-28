@@ -13,7 +13,23 @@
     Telegram.WebApp.ready();
 
     function sendData() {
-        Telegram.WebApp.sendData("Hello from Mini App!");
+        const data = "Hello from Mini App!";
+
+        // Сначала отправляем на сервер через fetch
+        fetch('api/mini-app-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}' // если CSRF включён
+            },
+            body: JSON.stringify({ data })
+        })
+            .then(res => res.json())
+            .then(res => console.log('Server response:', res))
+            .catch(err => console.error(err));
+
+        // Можно также отправить данные боту через Telegram, если нужно
+        Telegram.WebApp.sendData(data);
     }
 </script>
 </body>
