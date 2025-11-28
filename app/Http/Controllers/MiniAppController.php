@@ -12,6 +12,8 @@ class MiniAppController extends Controller
         $data = $request->input('data');
         $initData = $request->input('initData'); // передаём из JS
 
+        Log::info('initData:', ['initData' => $initData]);
+
         if (!$this->validateTelegramInitData($initData)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
