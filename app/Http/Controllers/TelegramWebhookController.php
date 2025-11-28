@@ -39,7 +39,7 @@ class TelegramWebhookController extends Controller
             } else {
                 $params = [
                     'chat_id' => $chatId,
-                    'text'    => "Ты написал: {$text}"
+                    'text'    => "Ты написал сейчас: {$text}"
                 ];
             }
 
