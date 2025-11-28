@@ -12,19 +12,66 @@ class TelegramWebhookController extends Controller
         $update = $request->all();
         Log::info('Telegram update:', $update);
 
-        if (isset($update['message'])) {
+        $token = config('tg.token');
+        $apiUrl = "https://api.telegram.org/bot{$token}/";
+
+        // === 1. Обычное сообщение ===
+        if (isset($update['message']) && !isset($update['message']['web_app_data'])) {
             $chatId = $update['message']['chat']['id'];
             $text   = $update['message']['text'] ?? '';
 
-            $token = config('tg.token');
-            $url   = "https://api.telegram.org/bot{$token}/sendMessage";
+            // Если пользователь написал "app" — отправляем кнопку для Mini App
+            if (strtolower($text) === 'app') {
+                $params = [
+                    'chat_id' => $chatId,
+                    'text'    => 'Запусти Mini App',
+                    'reply_markup' => json_encode([
+                        'inline_keyboard' => [
+                            [
+                                [
+                                    'text' => 'Открыть Mini App',
+                                    'web_app' => ['url' => 'https://example.com/miniapp']
+                                ]
+                            ]
+                        ]
+                    ])
+                ];
+            } else {
+                $params = [
+                    'chat_id' => $chatId,
+                    'text'    => "Ты написал: {$text}"
+                ];
+            }
+
+            file_get_contents($apiUrl . 'sendMessage?' . http_build_query($params));
+        }
+
+        // === 2. Данные из Mini App ===
+        if (isset($update['message']['web_app_data'])) {
+            $chatId = $update['message']['chat']['id'];
+            $data   = $update['message']['web_app_data']['data'];
+
+            Log::info("Mini App data: " . $data);
 
             $params = [
                 'chat_id' => $chatId,
-                'text'    => "Ты написал: {$text}"
+                'text'    => "Из Mini App пришло: {$data}"
             ];
 
-            file_get_contents($url . '?' . http_build_query($params));
+            file_get_contents($apiUrl . 'sendMessage?' . http_build_query($params));
+        }
+
+        // === 3. Callback‑query (если будут кнопки без Mini App) ===
+        if (isset($update['callback_query'])) {
+            $chatId = $update['callback_query']['message']['chat']['id'];
+            $data   = $update['callback_query']['data'];
+
+            $params = [
+                'chat_id' => $chatId,
+                'text'    => "Нажата кнопка: {$data}"
+            ];
+
+            file_get_contents($apiUrl . 'sendMessage?' . http_build_query($params));
         }
 
         return response()->json(['status' => 'ok']);
