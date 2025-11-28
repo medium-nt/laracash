@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AvailableAllCashback;
 use App\Models\Card;
 use App\Models\Category;
 use App\Models\Cashback;
@@ -9,7 +10,7 @@ use Illuminate\Support\Collection;
 
 class CashbackService
 {
-    public static function getAllCard(): array
+    public static function getAllCard($source = 'cashback'): array
     {
         $cardsUser = Card::query()->where('user_id', auth()->user()->id)->get();
         $categoryUser = Category::query()->where('user_id', auth()->user()->id)->get();
@@ -18,17 +19,21 @@ class CashbackService
         foreach ($categoryUser as $category) {
             foreach ($cardsUser as $card) {
                 $matrix[$category->id]['category_name'] = $category->title;
+                $matrix[$category->id]['is_important'] = $category->is_important;
 
                 $matrix[$category->id][$card->id]['card_number'] = $card->number;
                 $matrix[$category->id][$card->id]['card_id'] = $card->id;
                 $matrix[$category->id][$card->id]['bank_name'] = $card->bank->title;
 
-                $cashback = Cashback::query()
+                // Разница только в модели источника данных
+                $model = $source === 'available' ? AvailableAllCashback::class : Cashback::class;
+                $cashback = $model::query()
                     ->where('card_id', $card->id)
                     ->where('category_id', $category->id)
                     ->first();
                 $matrix[$category->id][$card->id]['percent'] = $cashback->cashback_percentage ?? '-';
                 $matrix[$category->id][$card->id]['mcc'] = $cashback->mcc ?? '';
+                $matrix[$category->id][$card->id]['is_check'] = $cashback->is_check ?? false;
             }
         }
 

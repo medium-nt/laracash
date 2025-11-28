@@ -17,7 +17,18 @@
             <div class="card">
                 <div class="card-body table-container">
 
-                    <a class="btn btn-outline-secondary mb-3" href="#" id="toggleButton" onclick="toggleTableRows()">Показать все категории</a>
+                    <a class="btn btn-outline-secondary mb-3"
+                       href="#"
+                       id="toggleButton"
+                       onclick="toggleTableRows()">
+                        Показать все категории
+                    </a>
+
+                    <a href="{{ route('cashback.all_available_cashback') }}"
+                       class="btn btn-link mb-3 ml-3"
+                       id="toggleButton">
+                        Подобрать оптимальный кешбек
+                    </a>
 
                     <table id="cashback" class="table table-hover table-bordered align-middle table-col-auto">
                         <thead>

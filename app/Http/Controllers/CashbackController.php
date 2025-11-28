@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AvailableAllCashback;
+use App\Models\Cashback;
 use App\Models\Card;
 use App\Models\Category;
 use App\Services\AiService;
@@ -21,6 +23,39 @@ class CashbackController extends Controller
         return view('cashback.index', [
             'title' => 'Ваш кешбэк',
             'cashbackTable' => CashbackService::getAllCard(),
+            'allCardUser' => Card::query()->where('user_id', auth()->user()->id)->get(),
+        ]);
+    }
+
+    public function allAvailableCashback()
+    {
+        $userId = auth()->user()->id;
+
+        // Проверить, есть ли данные для пользователя в AvailableAllCashback
+        $userCards = Card::where('user_id', $userId)->pluck('id');
+        $hasData = AvailableAllCashback::whereIn('card_id', $userCards)->exists();
+
+        if (!$hasData) {
+            // Копировать данные из card_category_cashback
+            $cashbacks = Cashback::whereIn('card_id', $userCards)->get();
+
+            foreach ($cashbacks as $cashback) {
+                AvailableAllCashback::updateOrCreate(
+                    [
+                        'card_id' => $cashback->card_id,
+                        'category_id' => $cashback->category_id
+                    ],
+                    [
+                        'cashback_percentage' => $cashback->cashback_percentage,
+                        'is_check' => false
+                    ]
+                );
+            }
+        }
+
+        return view('cashback.all_available_cashback', [
+            'title' => 'Ваш кешбэк',
+            'cashbackTable' => CashbackService::getAllCard('available'),
             'allCardUser' => Card::query()->where('user_id', auth()->user()->id)->get(),
         ]);
     }
@@ -104,5 +139,41 @@ class CashbackController extends Controller
         }
 
         return back()->with('error', 'Кешбек не был распознан!');
+    }
+
+    public function inlineUpdate(Request $request)
+    {
+        $request->validate([
+            'card_id' => 'required|integer',
+            'category_id' => 'required|integer',
+            'percent' => 'nullable|numeric|min:0|max:100',
+        ]);
+
+        $record = AvailableAllCashback::where('card_id', $request->card_id)
+            ->where('category_id', $request->category_id)
+            ->firstOrFail();
+
+        $record->cashback_percentage = $request->percent ?: 0;
+        $record->save();
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function togglePin(Request $request)
+    {
+        $request->validate([
+            'card_id' => 'required|integer',
+            'category_id' => 'required|integer',
+            'is_check' => 'required|boolean',
+        ]);
+
+        $record = AvailableAllCashback::where('card_id', $request->card_id)
+            ->where('category_id', $request->category_id)
+            ->firstOrFail();
+
+        $record->is_check = $request->is_check;
+        $record->save();
+
+        return response()->json(['status' => 'ok', 'is_check' => $record->is_check]);
     }
 }

@@ -98,4 +98,22 @@ class CategoryController extends Controller
 
         return redirect()->route('categories.index')->with($message);
     }
+
+    public function changeImportant(Request $request)
+    {
+        $request->validate([
+            'category_id' => 'required|integer',
+        ]);
+
+        $record = Category::where('id', $request->category_id)
+            ->firstOrFail();
+
+        $record->is_important = !$record->is_important;
+        $record->save();
+
+        return response()->json([
+            'status' => 'ok',
+            'is_important' => $record->is_important
+        ]);
+    }
 }

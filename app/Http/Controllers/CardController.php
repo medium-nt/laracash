@@ -95,4 +95,20 @@ class CardController extends Controller
 
         return redirect()->route('cards.index')->with('success', 'Карта удалена');
     }
+
+    public function numberUpdate(Request $request)
+    {
+        $request->validate([
+            'card_id' => 'required|integer',
+            'number_categories' => 'nullable|numeric|min:0|max:10',
+        ]);
+
+        $record = Card::where('id', $request->card_id)
+            ->firstOrFail();
+
+        $record->number_categories = $request->number_categories ?: 0;
+        $record->save();
+
+        return response()->json(['status' => 'ok']);
+    }
 }
