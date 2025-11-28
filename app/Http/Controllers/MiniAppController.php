@@ -12,8 +12,6 @@ class MiniAppController extends Controller
         $data = $request->input('data');
         $initData = $request->input('initData'); // передаём из JS
 
-        Log::info('initData:', ['initData' => $initData]);
-
         if (!$this->validateTelegramInitData($initData)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
@@ -31,6 +29,9 @@ class MiniAppController extends Controller
         parse_str($initData, $params);
 
         $hash = $params['hash'] ?? null;
+
+        Log::info('hash:', ['hash' => $hash]);
+
         unset($params['hash']);
 
         foreach ($params as $key => $value) {
