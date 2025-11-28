@@ -17,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Добавляем API middleware-группу
         $middleware->group('api', [
             SubstituteBindings::class,
-            ThrottleRequests::class . ':api',
+//            ThrottleRequests::class . ':api',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
