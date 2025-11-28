@@ -30,7 +30,7 @@
     <link rel="icon" sizes="512x512" href="{{ asset('icons/icon-512x512.png') }}">
 
     <!-- PWA Manifest -->
-    <link rel="manifest" href="{{ asset('manifest.json') }}">
+    <link rel="manifest" href="/search/{{ $user->search_token }}/manifest">
 
     <title>Твой кешбек</title>
 

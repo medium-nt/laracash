@@ -20,6 +20,9 @@ Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name
 Route::get('/search/{token}', [App\Http\Controllers\SearchController::class, 'index'])
     ->name('search.index');
 
+Route::get('/search/{token}/manifest', [App\Http\Controllers\SearchController::class, 'manifest'])
+    ->name('search.manifest');
+
 Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
 Route::get('/tg-app', function () {
