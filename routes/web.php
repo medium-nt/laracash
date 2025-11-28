@@ -22,6 +22,10 @@ Route::get('/search/{token}', [App\Http\Controllers\SearchController::class, 'in
 
 Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
+Route::get('/tg-app', function () {
+    return view('tg-app');
+});
+
 Route::middleware('auth')->group(function () {
 
     Route::prefix('/profile')->group(function () {
