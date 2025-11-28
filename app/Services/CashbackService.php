@@ -89,6 +89,7 @@ class CashbackService
                 'c.color as card_color',
                 'b.title as bank_title',
                 'ca.title as category_title',
+                'ca.keywords as keywords',
             ])
             ->get();
 
@@ -100,7 +101,10 @@ class CashbackService
                 $lowerSearch = mb_strtolower($search);
                 $lowerCategoryId = mb_strtolower($categoryId);
                 $lowerMcc = mb_strtolower($item->mcc);
-                if (str_contains($lowerCategoryId, $lowerSearch) || str_contains($lowerMcc, $lowerSearch)) {
+                $lowerKeywords = mb_strtolower($item->keywords ?? '');
+                if (str_contains($lowerCategoryId, $lowerSearch) ||
+                    str_contains($lowerKeywords, $lowerSearch) ||
+                    str_contains($lowerMcc, $lowerSearch)) {
                     if (!isset($groupedArray[$categoryId])) {
                         $groupedArray[$categoryId] = [];
                     }

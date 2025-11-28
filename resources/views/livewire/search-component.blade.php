@@ -10,8 +10,8 @@
                         <i class="fas fa-angle-double-left"></i>
                     </a>
 
-                    <input class="form-control" wire:model.live="search" type="text" name="searchInput" id="searchInput"
-                           aria-describedby="search-btn" placeholder="поиск по категории..." autofocus>
+                    <input class="form-control" wire:model.live.debounce.750ms="search" type="text" name="searchInput" id="searchInput"
+                           aria-describedby="search-btn" placeholder="категория и ключевое слово..." autofocus>
                     <label for="search" class="sr-only">Search</label>
 
                     <a href="/login" class="btn btn-default btn-r ml-0"><i class="fas fa-sign-in-alt"></i></a>
