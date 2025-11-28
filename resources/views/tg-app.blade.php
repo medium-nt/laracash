@@ -22,7 +22,10 @@
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': '{{ csrf_token() }}' // если CSRF включён
             },
-            body: JSON.stringify({ data })
+            body: JSON.stringify({
+                data,
+                initData: Telegram.WebApp.initData
+            })
         })
             .then(res => res.json())
             .then(res => console.log('Server response:', res))
