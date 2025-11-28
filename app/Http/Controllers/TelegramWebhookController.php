@@ -15,6 +15,8 @@ class TelegramWebhookController extends Controller
         $token = config('tg.token');
         $apiUrl = "https://api.telegram.org/bot{$token}/";
 
+        Log::info('update: ' . json_encode($update['message']));
+
         // === 1. Обычное сообщение ===
         if (isset($update['message']) && !isset($update['message']['web_app_data'])) {
             $chatId = $update['message']['chat']['id'];
