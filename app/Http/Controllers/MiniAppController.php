@@ -51,6 +51,9 @@ class MiniAppController extends Controller
 
         $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
+        Log::info($dataCheckString);
+        Log::info($calculatedHash);
+
         return hash_equals($calculatedHash, $hash);
     }
 }
