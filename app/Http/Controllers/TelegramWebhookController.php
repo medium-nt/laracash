@@ -30,7 +30,7 @@ class TelegramWebhookController extends Controller
                             [
                                 [
                                     'text' => 'Открыть Mini App',
-                                    'web_app' => ['url' => 'https://example.com/miniapp']
+                                    'web_app' => ['url' => 'https://laracash.test66.ru/tg-app']
                                 ]
                             ]
                         ]
