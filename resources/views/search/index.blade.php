@@ -118,14 +118,27 @@
         });
     });
 
-    // Регистрируем ОФФЛАЙН Service Worker
+    // Регистрируем подходящий Service Worker
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw-offline.js')
+        // Определяем Safari или другой браузер
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+        // Выбираем правильный Service Worker
+        const swFile = isSafari ? '/sw-safari.js' : '/sw-offline.js';
+
+        navigator.serviceWorker.register(swFile)
             .then(registration => {
-                console.log('ОФФЛАЙН SW зарегистрирован:', registration);
+                console.log('Service Worker зарегистрирован:', swFile, registration);
+
+                // Для Safari - показываем уведомление
+                if (isSafari) {
+                    console.log('🍎 Используется Safari Compatible Service Worker');
+                } else {
+                    console.log('🌐 Используется Full Featured Service Worker');
+                }
             })
             .catch(error => {
-                console.error('Ошибка регистрации ОФФЛАЙН SW:', error);
+                console.error('Ошибка регистрации Service Worker:', swFile, error);
             });
     }
 
