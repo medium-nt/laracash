@@ -23,9 +23,6 @@ Route::get('/search/{token}', [App\Http\Controllers\SearchController::class, 'in
 Route::get('/search/{token}/manifest', [App\Http\Controllers\SearchController::class, 'manifest'])
     ->name('search.manifest');
 
-Route::get('/api/search-data/{token}', [App\Http\Controllers\SearchController::class, 'getSearchData'])
-    ->name('api.search.index');
-
 Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
 Route::get('/tg-app', function () {
@@ -121,6 +118,15 @@ Route::middleware('auth')->group(function () {
         Route::get('/recognize/{card}', [App\Http\Controllers\CashbackController::class, 'recognizeCashback'])
             ->can('create', 'card')
             ->name('cashback.recognize_cashback');
+
+        // Маршруты для оптимизации кешбэков
+        Route::prefix('cashback')->group(function () {
+            Route::get('/optimize', [App\Http\Controllers\CashbackController::class, 'optimizeCashback'])
+                ->name('cashback.optimize');
+
+            Route::post('/apply_optimization', [App\Http\Controllers\CashbackController::class, 'applyOptimization'])
+                ->name('cashback.apply_optimization');
+        });
     });
 
     Route::prefix('/banks')->group(function () {
