@@ -1,0 +1,332 @@
+const CACHE_VERSION = 'laracash-v2';
+const CACHE_NAME = 'laracash-cache';
+
+// Основные файлы которые нужно кешировать для PWA
+const CACHE_URLS = [
+    // Основные страницы и HTML
+    '/',
+    '/search',
+    '/api/search-data/', // для разных токенов
+
+    // CSS файлы
+    '/vendor/fontawesome-free/css/all.min.css',
+    '/vendor/adminlte/dist/css/adminlte.min.css',
+    '/css/app.css',
+
+    // JavaScript файлы
+    '/js/app.js',
+    '/js/sw.js', // старый сервис воркер
+    '/vendor/jquery/jquery.min.js',
+    '/vendor/bootstrap/js/bootstrap.min.js',
+
+    // Иконки и manifest
+    '/icons/icon-57x57.png',
+    '/icons/icon-60x60.png',
+    '/icons/icon-72x72.png',
+    '/icons/icon-76x76.png',
+    '/icons/icon-114x114.png',
+    '/icons/icon-120x120.png',
+    '/icons/icon-144x144.png',
+    '/icons/icon-152x152.png',
+    '/icons/icon-167x167.png',
+    '/icons/icon-180x180.png',
+    '/icons/icon-192x192.png',
+    '/icons/icon-512x512.png',
+    '/favicon.png'
+];
+
+// Установка Service Worker - кешируем все основные файлы
+self.addEventListener('install', event => {
+    console.log('🚀 SW: Installing version:', CACHE_VERSION);
+
+    event.waitUntil(
+        caches.open(CACHE_NAME)
+            .then(cache => {
+                console.log('📦 SW: Caching core files');
+                return cache.addAll(CACHE_URLS);
+            })
+            .then(() => {
+                console.log('✅ SW: All core files cached successfully');
+                // Пропускаем ожидание и активируем сразу
+                return self.skipWaiting();
+            })
+            .catch(error => {
+                console.error('❌ SW: Error caching files:', error);
+            })
+    );
+});
+
+// Активация - очистка старого кеша
+self.addEventListener('activate', event => {
+    console.log('🔄 SW: Activating version:', CACHE_VERSION);
+
+    event.waitUntil(
+        caches.keys().then(cacheNames => {
+            return Promise.all(
+                cacheNames.map(cacheName => {
+                    if (cacheName !== CACHE_NAME) {
+                        console.log('🗑️ SW: Deleting old cache:', cacheName);
+                        return caches.delete(cacheName);
+                    }
+                })
+            );
+        })
+        .then(() => {
+            console.log('✅ SW: Activation complete');
+            // Берем контроль над всеми вкладками
+            return self.clients.claim();
+        })
+    );
+});
+
+// Основная логика перехвата запросов
+self.addEventListener('fetch', event => {
+    const request = event.request;
+    const url = new URL(request.url);
+
+    // Пропускаем Chrome Extension запросы
+    if (url.protocol === 'chrome-extension:') {
+        return;
+    }
+
+    // Пропускаем не-HTTP запросы
+    if (!url.protocol.startsWith('http')) {
+        return;
+    }
+
+    // Стратегия для разных типов запросов
+    event.respondWith(handleRequest(request));
+});
+
+// Основная функция обработки запросов
+async function handleRequest(request) {
+    const url = new URL(request.url);
+
+    try {
+        // 1. Сначала пробуем сеть (Cache First стратегия для офлайн файлов)
+        if (isCoreFile(request.url)) {
+            return await cacheFirst(request);
+        }
+
+        // 2. Для API запросов - Network First стратегия
+        if (isAPIRequest(request.url)) {
+            return await networkFirst(request);
+        }
+
+        // 3. Для остальных - Cache First с fallback
+        return await cacheFirst(request);
+
+    } catch (error) {
+        console.error('❌ SW: Error handling request:', request.url, error);
+
+        // Если все не удалось - пробуем отдать из кеша
+        try {
+            return await caches.match(request);
+        } catch (cacheError) {
+            console.error('❌ SW: Cache also failed:', cacheError);
+
+            // Для HTML запросов отдаем оффлайн страницу
+            if (request.headers.get('accept')?.includes('text/html')) {
+                return new Response(getOfflineHTML(), {
+                    headers: { 'Content-Type': 'text/html' }
+                });
+            }
+
+            // Для остальных - просто ошибка
+            return new Response('Offline - no cached version available', {
+                status: 503,
+                statusText: 'Service Unavailable'
+            });
+        }
+    }
+}
+
+// Cache First стратегия - сначала кеш, потом сеть
+async function cacheFirst(request) {
+    // Сначала пробуем кеш
+    const cachedResponse = await caches.match(request);
+
+    if (cachedResponse) {
+        console.log('📦 SW: Serving from cache:', request.url);
+        // В фоне обновляем кеш
+        updateCache(request);
+        return cachedResponse;
+    }
+
+    // Если в кеше нет - пробуем сеть
+    try {
+        console.log('🌐 SW: Fetching from network:', request.url);
+        const networkResponse = await fetch(request);
+
+        // Кешируем успешные ответы
+        if (networkResponse.ok && request.method === 'GET') {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => {
+                cache.put(request, responseClone);
+            });
+        }
+
+        return networkResponse;
+
+    } catch (error) {
+        console.error('❌ SW: Network failed for:', request.url, error);
+        throw error;
+    }
+}
+
+// Network First стратегия - сначала сеть, потом кеш
+async function networkFirst(request) {
+    try {
+        console.log('🌐 SW: API request to network:', request.url);
+        const networkResponse = await fetch(request);
+
+        // Кешируем успешные API ответы
+        if (networkResponse.ok) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => {
+                cache.put(request, responseClone);
+            });
+        }
+
+        return networkResponse;
+
+    } catch (error) {
+        console.log('📦 SW: Network failed, trying cache for:', request.url);
+
+        // Пробуем достать из кеша
+        const cachedResponse = await caches.match(request);
+
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+
+        throw error;
+    }
+}
+
+// Обновление кеша в фоне (не блокируя основной запрос)
+async function updateCache(request) {
+    try {
+        const response = await fetch(request);
+        if (response.ok) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(request, response);
+        }
+    } catch (error) {
+        // Игнорируем ошибки фонового обновления
+        console.log('ℹ️ SW: Background update failed:', error);
+    }
+}
+
+// Проверяем является ли запрос к основным файлу приложения
+function isCoreFile(url) {
+    return CACHE_URLS.some(cacheUrl => {
+        return url.includes(cacheUrl) ||
+               url.includes('/vendor/') ||
+               url.includes('/css/') ||
+               url.includes('/js/') ||
+               url.includes('/icons/') ||
+               url.endsWith('.css') ||
+               url.endsWith('.js') ||
+               url.endsWith('.png') ||
+               url.endsWith('.jpg') ||
+               url.endsWith('.svg') ||
+               url.endsWith('.ico');
+    });
+}
+
+// Проверяем является ли запрос к API
+function isAPIRequest(url) {
+    return url.includes('/api/') || url.includes('/livewire/');
+}
+
+// HTML для оффлайн страницы
+function getOfflineHTML() {
+    return `
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Твой кешбэк - Офлайн режим</title>
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                margin: 0;
+                padding: 20px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                text-align: center;
+            }
+            .offline-container {
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                padding: 40px;
+                max-width: 400px;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            }
+            .offline-icon {
+                font-size: 64px;
+                margin-bottom: 20px;
+            }
+            .offline-title {
+                font-size: 24px;
+                margin-bottom: 10px;
+            }
+            .offline-text {
+                font-size: 16px;
+                opacity: 0.8;
+                line-height: 1.5;
+            }
+            .retry-btn {
+                background: white;
+                color: #667eea;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-size: 16px;
+                cursor: pointer;
+                margin-top: 20px;
+                transition: transform 0.2s;
+            }
+            .retry-btn:hover {
+                transform: scale(1.05);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="offline-container">
+            <div class="offline-icon">📦</div>
+            <h1 class="offline-title">Офлайн режим</h1>
+            <p class="offline-text">
+                Приложение работает в офлайн режиме.<br>
+                Доступны сохраненные данные и кешбэки.<br>
+                Для обновления проверьте подключение к интернету.
+            </p>
+            <button class="retry-btn" onclick="location.reload()">
+                🔄 Обновить
+            </button>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+// Обработка сообщений от клиента (для обновления кеша)
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+
+    if (event.data && event.data.type === 'CACHE_UPDATE') {
+        console.log('🔄 SW: Manual cache update requested');
+        // Можно добавить логику принудительного обновления кеша
+    }
+});
+
+console.log('🚀 Service Worker initialized:', CACHE_VERSION);

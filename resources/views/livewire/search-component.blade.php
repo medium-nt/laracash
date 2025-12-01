@@ -247,7 +247,6 @@
          * Инициализация кеширования при загрузке страницы
          */
         document.addEventListener('DOMContentLoaded', function() {
-            // Запускаем кеширование с небольшой задержкой, чтобы не блокировать загрузку страницы
             setTimeout(function() {
                 cacheCashbackImages();
             }, 1000); // Задержка 1 секунда
@@ -312,26 +311,6 @@
                     });
             }
         });
-
-        /*
-        // СТАРАЯ ЛОГИКА (сохранена для совместимости, закомментирована)
-        $('#cashbackModal').on('show.bs.modal', function (event) {
-            var trigger = $(event.relatedTarget);
-            var cardId = trigger.data('card-id');
-            var src = trigger.data('cashback-image');
-            var imageSrc = '/storage/card_cashback_image/' + src;
-
-            var modal = $(this);
-            if (src === '') {
-                imageSrc = '';
-                modal.find('#modalImage').attr('alt', 'Скриншот карты не найден');
-                modal.find('#modalImage').attr('src', imageSrc);
-            } else {
-                modal.find('#modalCardId').text('ID карты: ' + cardId);
-                modal.find('#modalImage').attr('src', imageSrc);
-            }
-        });
-        */
     </script>
 
 </div>

@@ -23,6 +23,9 @@ Route::get('/search/{token}', [App\Http\Controllers\SearchController::class, 'in
 Route::get('/search/{token}/manifest', [App\Http\Controllers\SearchController::class, 'manifest'])
     ->name('search.manifest');
 
+Route::get('/api/search-data/{token}', [App\Http\Controllers\SearchController::class, 'getSearchData'])
+    ->name('api.search.index');
+
 Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
 Route::get('/tg-app', function () {

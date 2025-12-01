@@ -118,6 +118,17 @@
         });
     });
 
+    // Регистрируем ОФФЛАЙН Service Worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw-offline.js')
+            .then(registration => {
+                console.log('ОФФЛАЙН SW зарегистрирован:', registration);
+            })
+            .catch(error => {
+                console.error('Ошибка регистрации ОФФЛАЙН SW:', error);
+            });
+    }
+
 </script>
 </body>
 </html>
