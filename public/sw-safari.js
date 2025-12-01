@@ -1,8 +1,8 @@
-// Safari Compatible Service Worker
-const CACHE_VERSION = 'laracash-safari-v1';
+// Safari Compatible Service Worker - Fixed Version
+const CACHE_VERSION = 'laracash-safari-v2';
 const CACHE_NAME = 'laracash-safari-cache';
 
-// Упрощенный список файлов для кеширования (Safari более строгий)
+// Основные файлы для кеширования
 const CACHE_URLS = [
     '/css/app.css',
     '/js/app.js',
@@ -15,132 +15,199 @@ const CACHE_URLS = [
     '/favicon.png'
 ];
 
-// Установка Service Worker - Safari Compatible
+// Установка Service Worker
 self.addEventListener('install', function(event) {
-    console.log('🚀 SW: Installing Safari version:', CACHE_VERSION);
+    console.log('🚀 Safari SW: Installing version:', CACHE_VERSION);
 
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(function(cache) {
-                console.log('📦 SW: Caching core files');
+                console.log('📦 Safari SW: Caching core files');
                 return cache.addAll(CACHE_URLS);
             })
             .then(function() {
-                console.log('✅ SW: All files cached');
+                console.log('✅ Safari SW: All files cached');
             })
             .catch(function(error) {
-                console.error('❌ SW: Cache error:', error);
+                console.error('❌ Safari SW: Cache error:', error);
             })
     );
 });
 
-// Активация - Safari Compatible
+// Активация
 self.addEventListener('activate', function(event) {
-    console.log('🔄 SW: Activating Safari version:', CACHE_VERSION);
+    console.log('🔄 Safari SW: Activating version:', CACHE_VERSION);
 
     event.waitUntil(
         caches.keys().then(function(cacheNames) {
             return Promise.all(
                 cacheNames.map(function(cacheName) {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('🗑️ SW: Delete old cache:', cacheName);
+                        console.log('🗑️ Safari SW: Delete old cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
         })
         .then(function() {
-            console.log('✅ SW: Activation complete');
+            console.log('✅ Safari SW: Activation complete');
         })
     );
 });
 
-// Упрощенная обработка fetch - Safari Compatible
+// Основная обработка fetch
 self.addEventListener('fetch', function(event) {
-    // Safari требует чтобы мы всегда что-то возвращали
-    if (!event.request.url.startsWith('http')) {
-        // Пропускаем chrome-extension и другие протоколы
+    var request = event.request;
+    var url = request.url;
+
+    // Пропускаем не-HTTP запросы
+    if (!url.startsWith('http')) {
         return;
     }
 
     event.respondWith(
-        caches.match(event.request)
-            .then(function(response) {
-                // Если есть в кеше - возвращаем из кеша
-                if (response) {
-                    console.log('📦 SW: From cache:', event.request.url);
-                    return response;
-                }
-
-                // Если нет в кеше - пробуем сеть
-                return fetch(event.request)
-                    .then(function(response) {
-                        // Кешируем только успешные GET запросы
-                        if (response.ok && event.request.method === 'GET') {
-                            // Кешируем только основные файлы
-                            if (isCacheableFile(event.request.url)) {
-                                const responseClone = response.clone();
-                                caches.open(CACHE_NAME)
-                                    .then(function(cache) {
-                                        cache.put(event.request, responseClone);
-                                    })
-                                    .catch(function(error) {
-                                        console.log('SW: Cache put error:', error);
-                                    });
-                            }
-                        }
-                        return response;
-                    })
-                    .catch(function(error) {
-                        console.log('SW: Network error:', error);
-
-                        // Для HTML запросов отдаем офлайн страницу
-                        if (event.request.headers.get('accept').includes('text/html')) {
-                            return new Response(getOfflineHTML(), {
-                                status: 200,
-                                statusText: 'OK',
-                                headers: {
-                                    'Content-Type': 'text/html'
-                                }
-                            });
-                        }
-
-                        // Для остальных запросов - простая ошибка
-                        return new Response('Offline - no cached version', {
-                            status: 503,
-                            statusText: 'Service Unavailable'
-                        });
-                    });
-            })
-            .catch(function(error) {
-                console.error('SW: Cache match error:', error);
-
-                // Если даже кеш не работает - пробуем сеть
-                return fetch(event.request)
-                    .catch(function() {
-                        return new Response('Service Unavailable', {
-                            status: 503,
-                            statusText: 'Service Unavailable'
-                        });
-                    });
-            })
+        handleRequest(request)
     );
 });
 
-// Проверяем можно ли кешировать файл
-function isCacheableFile(url) {
-    // Базовые файлы приложения
-    const fileExtensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'];
-    const hasCacheableExtension = fileExtensions.some(ext => url.includes(ext));
+// Функция обработки запросов
+function handleRequest(request) {
+    return caches.match(request)
+        .then(function(cachedResponse) {
+            // Если есть в кеше - возвращаем из кеша
+            if (cachedResponse) {
+                console.log('📦 Safari SW: From cache:', request.url);
+                return cachedResponse;
+            }
 
-    // или содержит эти пути
-    const cacheablePaths = ['/css/', '/js/', '/icons/', '/vendor/'];
-    const hasCacheablePath = cacheablePaths.some(path => url.includes(path));
+            // Если нет в кеше - пробуем сеть
+            return fetch(request)
+                .then(function(networkResponse) {
+                    console.log('🌐 Safari SW: From network:', request.url);
 
-    return hasCacheableExtension || hasCacheablePath;
+                    // Кешируем успешные GET запросы
+                    if (networkResponse.ok && request.method === 'GET') {
+                        if (shouldCache(request.url)) {
+                            var responseClone = networkResponse.clone();
+                            caches.open(CACHE_NAME)
+                                .then(function(cache) {
+                                    cache.put(request, responseClone);
+                                })
+                                .catch(function(error) {
+                                    console.log('Safari SW: Cache put error:', error);
+                                });
+                        }
+                    }
+                    return networkResponse;
+                })
+                .catch(function(error) {
+                    console.log('Safari SW: Network failed:', request.url);
+
+                    // Для HTML запросов - пробуем найти PWA страницу
+                    if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
+                        return getOfflinePWAPage();
+                    }
+
+                    // Для остальных запросов - ошибка
+                    return new Response('Offline - no cached version', {
+                        status: 503,
+                        statusText: 'Service Unavailable'
+                    });
+                });
+        })
+        .catch(function(error) {
+            console.error('Safari SW: Cache match error:', error);
+
+            // Для HTML запросов - пробуем найти PWA страницу
+            if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
+                return getOfflinePWAPage();
+            }
+
+            return new Response('Service Unavailable', {
+                status: 503,
+                statusText: 'Service Unavailable'
+            });
+        });
 }
 
-// Упрощенная офлайн страница для Safari
+// Попытка получить офлайн PWA страницу
+function getOfflinePWAPage() {
+    console.log('🔄 Safari SW: Getting offline PWA page');
+
+    // Ищем в кеше любые HTML страницы
+    return caches.open(CACHE_NAME)
+        .then(function(cache) {
+            return cache.keys()
+                .then(function(requests) {
+                    console.log('📄 Safari SW: Cached requests:', requests.map(function(r) { return r.url; }));
+
+                    // Ищем любые HTML или PWA страницы
+                    var htmlRequests = requests.filter(function(req) {
+                        return req.url.includes('/search/') ||
+                               req.url.includes('.html') ||
+                               req.url.match(/\/search\/[a-zA-Z0-9]+/);
+                    });
+
+                    if (htmlRequests.length > 0) {
+                        console.log('✅ Safari SW: Found PWA pages:', htmlRequests.map(function(r) { return r.url; }));
+                        // Возвращаем первую найденную PWA страницу
+                        return cache.match(htmlRequests[0]);
+                    }
+
+                    console.log('❌ Safari SW: No PWA pages found in cache');
+                    return null;
+                });
+        })
+        .then(function(pwaPage) {
+            if (pwaPage) {
+                return pwaPage;
+            }
+
+            // Если нет PWA страниц - создаем офлайн индикатор
+            console.log('📦 Safari SW: Returning offline indicator');
+            return new Response(getOfflineHTML(), {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    'Content-Type': 'text/html'
+                }
+            });
+        })
+        .catch(function(error) {
+            console.error('Safari SW: Cache open error:', error);
+
+            // В случае ошибки - возвращаем офлайн индикатор
+            return new Response(getOfflineHTML(), {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                    'Content-Type': 'text/html'
+                }
+            });
+        });
+}
+
+// Проверяем нужно ли кешировать файл
+function shouldCache(url) {
+    // Базовые файлы приложения
+    var fileExtensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'];
+    var hasCacheableExtension = fileExtensions.some(function(ext) {
+        return url.indexOf(ext) !== -1;
+    });
+
+    // или содержит эти пути
+    var cacheablePaths = ['/css/', '/js/', '/icons/', '/vendor/'];
+    var hasCacheablePath = cacheablePaths.some(function(path) {
+        return url.indexOf(path) !== -1;
+    });
+
+    // или это главная страница поиска
+    var isSearchPage = url.match(/\/search\/[a-zA-Z0-9]+/) || url.indexOf('/search/') !== -1;
+
+    return hasCacheableExtension || hasCacheablePath || isSearchPage;
+}
+
+// HTML для офлайн индикатора
 function getOfflineHTML() {
     return '<!DOCTYPE html>' +
         '<html lang="ru">' +
@@ -176,9 +243,9 @@ function getOfflineHTML() {
         '<div class="offline-icon">📦</div>' +
         '<h1 class="offline-title">Офлайн режим</h1>' +
         '<p class="offline-text">' +
-        'Приложение работает офлайн.<br>' +
-        'Доступны сохраненные данные.<br>' +
-        'Проверьте подключение к интернету.' +
+        'PWA работает офлайн.<br>' +
+        'Проверьте подключение к интернету.<br>' +
+        'Данные доступны в основном приложении.' +
         '</p>' +
         '<button class="retry-btn" onclick="location.reload()">🔄 Обновить</button>' +
         '</div>' +
