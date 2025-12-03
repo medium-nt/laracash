@@ -52,6 +52,11 @@ class AiService
             'purpose' => 'general',
         ]);
 
+        Log::info('Response download file:', [
+            'response' => $response->json(),
+            'card' => $card->id,
+        ]);
+
         return $response->json('id');
     }
 
@@ -91,6 +96,11 @@ class AiService
 
             $result = $response->json();
 
+            Log::info('Response recognize cashback:', [
+                'result' => $result,
+                'card' => $card->id,
+            ]);
+
             $decoded = json_decode($result['choices'][0]['message']['content'], true);
 
             $card->cashback_json = $decoded;
@@ -116,11 +126,7 @@ class AiService
             'scope' => 'GIGACHAT_API_PERS',
         ]);
 
-        Log::info($response->body());
-
-        if ($response->clientError()) {
-            return '';
-        }
+        Log::info('Response token: ' . $response->body());
 
         if (empty($response->json('access_token'))) {
             return '';
