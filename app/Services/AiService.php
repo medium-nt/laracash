@@ -115,6 +115,14 @@ class AiService
             'scope' => 'GIGACHAT_API_PERS',
         ]);
 
+        if ($response->clientError()) {
+            return '';
+        }
+
+        if (empty($response->json('access_token'))) {
+            return '';
+        }
+
         return $response->json('access_token');
     }
 
