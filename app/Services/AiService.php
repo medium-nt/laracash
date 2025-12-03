@@ -6,6 +6,7 @@ use App\Models\Card;
 use App\Models\Category;
 use Exception;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AiService
@@ -115,6 +116,8 @@ class AiService
             'scope' => 'GIGACHAT_API_PERS',
         ]);
 
+        Log::info($response->body());
+
         if ($response->clientError()) {
             return '';
         }
@@ -122,6 +125,7 @@ class AiService
         if (empty($response->json('access_token'))) {
             return '';
         }
+
 
         return $response->json('access_token');
     }
