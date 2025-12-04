@@ -88,7 +88,17 @@ function handleRequest(request) {
     // Для URL которые никогда не кешируются - только сеть
     if (shouldNeverCache(request.url)) {
         console.log('🌐 Safari SW: Network only:', request.url);
-        return fetch(request);
+        return fetch(request).catch(function(error) {
+            // Safari fallback для сетевых запросов без кеширования
+            console.log('❌ Safari SW: Network failed for non-cacheable request:', request.url);
+            return new Response('Service Unavailable', {
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: {
+                    'Content-Type': 'text/plain'
+                }
+            });
+        });
     }
 
     // Для страниц поиска - Network First (всегда свежие данные)
@@ -141,7 +151,20 @@ function cacheFirst(request) {
                 })
                 .catch(function(error) {
                     console.log('Safari SW: Network failed:', request.url);
-                    throw error;
+
+                    // Для HTML запросов - пробуем найти PWA страницу
+                    if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
+                        return getOfflinePWAPage();
+                    }
+
+                    // Возвращаем базовый ответ, не null
+                    return new Response('Service Unavailable', {
+                        status: 503,
+                        statusText: 'Service Unavailable',
+                        headers: {
+                            'Content-Type': 'text/plain'
+                        }
+                    });
                 });
         });
 }
@@ -176,15 +199,36 @@ function networkFirst(request) {
                         return cachedResponse;
                     }
 
-                    // Если нет в кеше и нет сети - пробуем найти PWA страницу
+                    console.log('❌ Safari SW: No cache available for:', request.url);
+
+                    // Если нет в кеше и нет сети - возвращаем оффлайн страницу или ошибку
                     if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
                         return getOfflinePWAPage();
                     }
 
-                    // Для остальных запросов - ошибка
-                    return new Response('Offline - no cached version', {
+                    // Для остальных запросов - возвращаем базовый ответ, не null
+                    return new Response('Offline - no cached version available', {
                         status: 503,
-                        statusText: 'Service Unavailable'
+                        statusText: 'Service Unavailable',
+                        headers: {
+                            'Content-Type': 'text/plain'
+                        }
+                    });
+                })
+                .catch(function(cacheError) {
+                    console.log('❌ Safari SW: Cache match error:', cacheError);
+
+                    // Финальный fallback - всегда возвращаем валидный Response
+                    if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
+                        return getOfflinePWAPage();
+                    }
+
+                    return new Response('Service Unavailable', {
+                        status: 503,
+                        statusText: 'Service Unavailable',
+                        headers: {
+                            'Content-Type': 'text/plain'
+                        }
                     });
                 });
         });
@@ -215,7 +259,7 @@ function getOfflinePWAPage() {
                     }
 
                     console.log('❌ Safari SW: No PWA pages found in cache');
-                    return null;
+                    return null; // Это нормально, обработается в следующем then()
                 });
         })
         .then(function(pwaPage) {
