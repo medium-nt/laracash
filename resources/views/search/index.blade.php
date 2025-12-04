@@ -333,6 +333,85 @@
     }
 
     /**
+     * Получить base64 строку изображения из localStorage
+     * @param {string} imagePath - путь к изображению относительно /storage/card_cashback_image/
+     * @returns {string|null} base64 строка или null если не найдено
+     */
+    function getCachedImage(imagePath) {
+        try {
+            const cacheKey = 'cashback_img_' + imagePath;
+            return localStorage.getItem(cacheKey);
+        } catch (error) {
+            console.error('Ошибка при получении изображения из кеша:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Сохранить base64 изображение в localStorage
+     * @param {string} imagePath - путь к изображению
+     * @param {string} base64Data - base64 строка изображения
+     */
+    function saveImageToCache(imagePath, base64Data) {
+        try {
+            const cacheKey = 'cashback_img_' + imagePath;
+            localStorage.setItem(cacheKey, base64Data);
+            console.log('Изображение сохранено в кеш:', imagePath);
+        } catch (error) {
+            console.error('Ошибка при сохранении изображения в кеш:', error);
+        }
+    }
+
+    /**
+     * Загрузить изображение с сервера и сохранить в кеш
+     * @param {string} imagePath - путь к изображению относительно /storage/card_cashback_image/
+     * @returns {Promise<string>} Promise который вернет base64 строку
+     */
+    function loadAndCacheImage(imagePath) {
+        return new Promise((resolve, reject) => {
+            const timestamp = Date.now();
+            const fullUrl = '/storage/card_cashback_image/' + imagePath + '?v=' + timestamp;
+
+            console.log('Загрузка изображения:', fullUrl);
+
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+
+            img.onload = function() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+
+                    const base64 = canvas.toDataURL('image/jpeg', 0.8);
+
+                    saveImageToCache(imagePath, base64);
+                    console.log('✅ Изображение успешно загружено и закешировано:', imagePath);
+                    resolve(base64);
+                } catch (error) {
+                    console.error('❌ Ошибка обработки изображения:', imagePath, error);
+                    reject(error);
+                }
+            };
+
+            img.onerror = function() {
+                console.error('❌ Ошибка загрузки изображения:', fullUrl);
+                reject(new Error('Failed to load image: ' + fullUrl));
+            };
+
+            img.onabort = function() {
+                console.warn('⚠️ Загрузка изображения отменена:', imagePath);
+                reject(new Error('Image loading aborted: ' + imagePath));
+            };
+
+            img.src = fullUrl;
+        });
+    }
+
+    /**
      * Модифицированная функция блокирующей загрузки изображений с интеграцией в loader
      */
     async function blockingLoadImagesWithProgress() {
@@ -409,7 +488,12 @@
                 document.getElementById('livewireStage').querySelector('.stage-text').textContent = 'Данные кешбэков загружены';
             }
 
-            // Этап 2: Загрузка изображений
+            // Этап 2: Загрузка изображений (с очисткой кеша)
+            if (navigator.onLine) {
+                console.log('🌐 Очищаю старый кеш изображений перед загрузкой свежих...');
+                const removedCount = clearImageCache();
+                console.log(`🗑️ Очищено ${removedCount} изображений из кеша`);
+            }
             await blockingLoadImagesWithProgress();
 
             // Этап 3: Завершение
@@ -496,6 +580,41 @@
                 console.error('Ошибка регистрации Service Worker:', swFile, error);
             });
     }
+
+    /**
+     * Очистить все закешированные изображения из localStorage
+     * @returns {number} Количество удаленных изображений
+     */
+    function clearImageCache() {
+        try {
+            console.log('🗑️ Начинаю очистку кеша изображений...');
+            const keys = Object.keys(localStorage);
+            let removedCount = 0;
+
+            keys.forEach(function(key) {
+                if (key.startsWith('cashback_img_')) {
+                    localStorage.removeItem(key);
+                    removedCount++;
+                }
+            });
+
+            console.log('✅ Очищено изображений из кеша:', removedCount);
+            return removedCount;
+        } catch (error) {
+            console.error('❌ Ошибка при очистке кеша изображений:', error);
+            return 0;
+        }
+    }
+
+    /**
+     * Делаем функции глобально доступными после их определения
+     */
+    window.getCachedImage = getCachedImage;
+    window.loadAndCacheImage = loadAndCacheImage;
+    window.saveImageToCache = saveImageToCache;
+    window.clearImageCache = clearImageCache;
+
+    console.log('✅ Глобальные функции изображений зарегистрированы');
 
 </script>
 
