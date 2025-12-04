@@ -1,9 +1,8 @@
-const CACHE_VERSION = 'laracash-v3';
+const CACHE_VERSION = 'laracash-v4';
 const CACHE_NAME = 'laracash-cache';
 
 // URL которые никогда не должны кешироваться
 const NEVER_CACHE_PATTERNS = [
-    '/search/',
     '/livewire/',
     '/api/',
     '/storage/card_cashback_image/'

@@ -1,10 +1,9 @@
 // Safari Compatible Service Worker - Fixed Version
-const CACHE_VERSION = 'laracash-safari-v3';
+const CACHE_VERSION = 'laracash-safari-v4';
 const CACHE_NAME = 'laracash-safari-cache';
 
 // URL которые никогда не должны кешироваться
 const NEVER_CACHE_PATTERNS = [
-    '/search/',
     '/livewire/',
     '/api/',
     '/storage/card_cashback_image/'
@@ -169,18 +168,19 @@ function cacheFirst(request) {
         });
 }
 
-// Network First для Safari
+// Network First для Safari с обязательным кешированием
 function networkFirst(request) {
     return fetch(request)
         .then(function(networkResponse) {
             console.log('🌐 Safari SW: HTML from network:', request.url);
 
-            // Кешируем успешные ответы для оффлайн режима
+            // ВСЕГДА кешируем успешные HTML ответы для оффлайн режима
             if (networkResponse.ok && request.method === 'GET') {
                 var responseClone = networkResponse.clone();
                 caches.open(CACHE_NAME)
                     .then(function(cache) {
                         cache.put(request, responseClone);
+                        console.log('✅ Safari SW: Cached successful response:', request.url);
                     })
                     .catch(function(error) {
                         console.log('Safari SW: Cache put error:', error);
@@ -201,7 +201,7 @@ function networkFirst(request) {
 
                     console.log('❌ Safari SW: No cache available for:', request.url);
 
-                    // Если нет в кеше и нет сети - возвращаем оффлайн страницу или ошибку
+                    // Если нет в кеше и нет сети - возвращаем оффлайн страницу
                     if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
                         return getOfflinePWAPage();
                     }
