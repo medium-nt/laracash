@@ -1,13 +1,16 @@
-const CACHE_VERSION = 'laracash-v2';
+const CACHE_VERSION = 'laracash-v3';
 const CACHE_NAME = 'laracash-cache';
 
-// Основные файлы которые нужно кешировать для PWA
-const CACHE_URLS = [
-    // Основные страницы и HTML
-    '/',
-    '/search',
-    '/api/search-data/', // для разных токенов
+// URL которые никогда не должны кешироваться
+const NEVER_CACHE_PATTERNS = [
+    '/search/',
+    '/livewire/',
+    '/api/',
+    '/storage/card_cashback_image/'
+];
 
+// Основные файлы которые нужно кешировать для PWA (только статические ресурсы)
+const CACHE_URLS = [
     // CSS файлы
     '/vendor/fontawesome-free/css/all.min.css',
     '/vendor/adminlte/dist/css/adminlte.min.css',
@@ -15,7 +18,6 @@ const CACHE_URLS = [
 
     // JavaScript файлы
     '/js/app.js',
-    '/js/sw.js', // старый сервис воркер
     '/vendor/jquery/jquery.min.js',
     '/vendor/bootstrap/js/bootstrap.min.js',
 
@@ -103,17 +105,27 @@ async function handleRequest(request) {
     const url = new URL(request.url);
 
     try {
-        // 1. Сначала пробуем сеть (Cache First стратегия для офлайн файлов)
-        if (isCoreFile(request.url)) {
-            return await cacheFirst(request);
+        // 1. Для URL которые никогда не кешируются - только сеть
+        if (shouldNeverCache(request.url)) {
+            return await networkOnly(request);
         }
 
-        // 2. Для API запросов - Network First стратегия
-        if (isAPIRequest(request.url)) {
+        // 2. Для страниц поиска - Network First (всегда свежие данные)
+        if (isSearchPage(request.url)) {
             return await networkFirst(request);
         }
 
-        // 3. Для остальных - Cache First с fallback
+        // 3. Для остальных HTML страниц - Network First
+        if (isHTMLPage(request.url)) {
+            return await networkFirst(request);
+        }
+
+        // 4. Для статических файлов - Cache First
+        if (isStaticFile(request.url)) {
+            return await cacheFirst(request);
+        }
+
+        // 5. Для всего остального - Cache First с fallback
         return await cacheFirst(request);
 
     } catch (error) {
@@ -174,14 +186,21 @@ async function cacheFirst(request) {
     }
 }
 
+// Network Only стратегия - только сеть, без кеширования
+async function networkOnly(request) {
+    console.log('🌐 SW: Network only request:', request.url);
+    const networkResponse = await fetch(request);
+    return networkResponse;
+}
+
 // Network First стратегия - сначала сеть, потом кеш
 async function networkFirst(request) {
     try {
-        console.log('🌐 SW: API request to network:', request.url);
+        console.log('🌐 SW: HTML/Network First request:', request.url);
         const networkResponse = await fetch(request);
 
-        // Кешируем успешные API ответы
-        if (networkResponse.ok) {
+        // Кешируем успешные ответы для оффлайн режима
+        if (networkResponse.ok && request.method === 'GET') {
             const responseClone = networkResponse.clone();
             caches.open(CACHE_NAME).then(cache => {
                 cache.put(request, responseClone);
@@ -197,6 +216,7 @@ async function networkFirst(request) {
         const cachedResponse = await caches.match(request);
 
         if (cachedResponse) {
+            console.log('✅ SW: Serving from cache fallback:', request.url);
             return cachedResponse;
         }
 
@@ -218,26 +238,39 @@ async function updateCache(request) {
     }
 }
 
-// Проверяем является ли запрос к основным файлу приложения
-function isCoreFile(url) {
-    return CACHE_URLS.some(cacheUrl => {
-        return url.includes(cacheUrl) ||
-               url.includes('/vendor/') ||
-               url.includes('/css/') ||
-               url.includes('/js/') ||
-               url.includes('/icons/') ||
-               url.endsWith('.css') ||
-               url.endsWith('.js') ||
-               url.endsWith('.png') ||
-               url.endsWith('.jpg') ||
-               url.endsWith('.svg') ||
-               url.endsWith('.ico');
-    });
+// Проверяем нужно ли никогда не кешировать URL
+function shouldNeverCache(url) {
+    return NEVER_CACHE_PATTERNS.some(pattern => url.includes(pattern));
 }
 
-// Проверяем является ли запрос к API
-function isAPIRequest(url) {
-    return url.includes('/api/') || url.includes('/livewire/');
+// Проверяем является ли запрос к HTML странице
+function isHTMLPage(url) {
+    return url.includes('.html') ||
+           url.endsWith('/') ||
+           (!url.includes('.') && !url.includes('/vendor/') && !url.includes('/icons/'));
+}
+
+// Проверяем является ли запрос к странице поиска
+function isSearchPage(url) {
+    return url.includes('/search/') || url.match(/\/search\/[a-zA-Z0-9]+/);
+}
+
+// Проверяем является ли запрос к статическим файлам
+function isStaticFile(url) {
+    return CACHE_URLS.some(cacheUrl => url.includes(cacheUrl)) ||
+           url.includes('/vendor/') ||
+           url.includes('/css/') ||
+           url.includes('/js/') ||
+           url.includes('/icons/') ||
+           url.endsWith('.css') ||
+           url.endsWith('.js') ||
+           url.endsWith('.png') ||
+           url.endsWith('.jpg') ||
+           url.endsWith('.jpeg') ||
+           url.endsWith('.svg') ||
+           url.endsWith('.ico') ||
+           url.endsWith('.woff') ||
+           url.endsWith('.woff2');
 }
 
 // HTML для оффлайн страницы

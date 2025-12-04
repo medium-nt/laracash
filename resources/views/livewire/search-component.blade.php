@@ -1,4 +1,15 @@
 <div class="container">
+    <!-- Loader для блокирующей загрузки изображений -->
+    <div id="imageLoader" class="image-loader-overlay" style="display: none;">
+        <div class="image-loader-content">
+            <div class="spinner"></div>
+            <p>Загрузка свежих скриншотов кешбэков...</p>
+            <div class="progress-text">
+                <span id="loadingProgress">0</span> / <span id="totalImages">0</span>
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         <div class="col-12">
             <div class="search-form">
@@ -150,8 +161,9 @@
          */
         function loadAndCacheImage(imagePath) {
             return new Promise((resolve, reject) => {
-                // Полный URL к изображению
-                const fullUrl = '/storage/card_cashback_image/' + imagePath;
+                // Полный URL к изображению с версионированием для обхода кеша
+                const timestamp = Date.now();
+                const fullUrl = '/storage/card_cashback_image/' + imagePath + '?v=' + timestamp;
 
                 console.log('Загрузка изображения:', fullUrl);
 
@@ -190,7 +202,102 @@
         }
 
         /**
-         * Основная функция кеширования всех изображений на странице
+         * Очистить все закешированные изображения из localStorage
+         */
+        function clearImageCache() {
+            try {
+                console.log('🗑️ Очистка кеша изображений...');
+                const keys = Object.keys(localStorage);
+                let removedCount = 0;
+
+                keys.forEach(function(key) {
+                    if (key.startsWith('cashback_img_')) {
+                        localStorage.removeItem(key);
+                        removedCount++;
+                    }
+                });
+
+                console.log('✅ Удалено изображений из кеша:', removedCount);
+                return removedCount;
+            } catch (error) {
+                console.error('❌ Ошибка при очистке кеша изображений:', error);
+                return 0;
+            }
+        }
+
+        /**
+         * Блокирующая функция кеширования всех изображений с progress bar
+         * Загружает ВСЕ изображения заново при наличии интернета
+         */
+        function blockingCacheAllImages() {
+            console.log('🔄 Начало блокирующей загрузки изображений...');
+
+            // Находим все элементы с атрибутом data-cashback-image
+            const elements = document.querySelectorAll('[data-cashback-image]');
+
+            // Создаем массив для хранения уникальных путей изображений
+            const uniqueImagePaths = [];
+
+            // Собираем все уникальные пути к изображениям
+            elements.forEach(function(element) {
+                const imagePath = element.getAttribute('data-cashback-image');
+                // Добавляем только если путь не пустой и еще не добавлен
+                if (imagePath && imagePath.trim() !== '') {
+                    if (!uniqueImagePaths.includes(imagePath)) {
+                        uniqueImagePaths.push(imagePath);
+                    }
+                }
+            });
+
+            console.log('Найдено уникальных изображений для загрузки:', uniqueImagePaths.length);
+
+            if (uniqueImagePaths.length === 0) {
+                console.log('📸 Нет изображений для загрузки');
+                return Promise.resolve();
+            }
+
+            // Показываем loader
+            const loader = document.getElementById('imageLoader');
+            const progressText = document.getElementById('loadingProgress');
+            const totalText = document.getElementById('totalImages');
+
+            loader.style.display = 'flex';
+            progressText.textContent = '0';
+            totalText.textContent = uniqueImagePaths.length;
+
+            // Загружаем все изображения последовательно с прогрессом
+            let loadedCount = 0;
+            const loadPromises = uniqueImagePaths.map(function(imagePath) {
+                return loadAndCacheImage(imagePath)
+                    .then(function() {
+                        loadedCount++;
+                        progressText.textContent = loadedCount;
+                        console.log(`✅ Загружено (${loadedCount}/${uniqueImagePaths.length}):`, imagePath);
+                    })
+                    .catch(function(error) {
+                        loadedCount++;
+                        progressText.textContent = loadedCount;
+                        console.error('❌ Ошибка загрузки изображения:', imagePath, error);
+                        // Продолжаем загрузку даже с ошибками
+                    });
+            });
+
+            // Ждем завершения всех загрузок
+            return Promise.allSettled(loadPromises)
+                .then(function() {
+                    console.log('🎉 Все изображения загружены!');
+                    // Скрываем loader
+                    loader.style.display = 'none';
+                })
+                .catch(function() {
+                    console.log('⚠️ Загрузка завершена с ошибками');
+                    // Все равно скрываем loader
+                    loader.style.display = 'none';
+                });
+        }
+
+        /**
+         * Основная функция кеширования всех изображений на странице (для оффлайн режима)
          * Находит все элементы с data-cashback-image и загружает отсутствующие в кеш
          */
         function cacheCashbackImages() {
@@ -244,17 +351,27 @@
         }
 
         /**
-         * Инициализация кеширования при загрузке страницы
+         * Инициализация при загрузке страницы - управление изображениями
+         * NOTE: Основная логика загрузки теперь в search/index.blade.php
          */
         document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(function() {
-                cacheCashbackImages();
-            }, 1000); // Задержка 1 секунда
+            console.log('🔄 SearchComponent: Инициализация изображений...');
+
+            // При наличии интернета - очищаем старый кеш изображений
+            // Это нужно сделать до того как начнется загрузка в search/index.blade.php
+            if (navigator.onLine) {
+                console.log('🌐 Очищаю старый кеш изображений...');
+                const removedCount = clearImageCache();
+                console.log(`🗑️ Очищено ${removedCount} изображений из кеша`);
+            } else {
+                console.log('📶 Режим оффлайн - сохраняю существующий кеш');
+            }
         });
 
+        // NOTE: Слушатели онлайн/офлайн перенесены в search/index.blade.php
+
         /**
-         * Обновленная логика модального окна с поддержкой кеширования
-         * Сначала проверяет localStorage, потом загружает с сервера
+         * Простая логика модального окна - используем изображения из localStorage
          */
         $('#cashbackModal').on('show.bs.modal', function (event) {
             var trigger = $(event.relatedTarget);
@@ -264,53 +381,103 @@
 
             // Проверяем есть ли путь к изображению
             if (src === '') {
-                // Старая логика для пустого изображения
                 modal.find('#modalImage').attr('alt', 'Скриншот карты не найден');
                 modal.find('#modalImage').attr('src', '');
                 return; // Выходим если нет изображения
             }
 
-            // --- НОВАЯ ЛОГИКА С КЕШЕМ ---
+            // --- ПРОСТАЯ ЛОГИКА: ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЙ КЕШ ---
 
-            // Сначала проверяем есть ли изображение в localStorage
             var cachedImage = getCachedImage(src);
 
             if (cachedImage) {
-                // ✅ Изображение найдено в кеше - показываем сразу
-                console.log('🚀 Изображение загружено из кеша:', src);
+                // ✅ Изображение есть в localStorage - показываем сразу
+                console.log('📦 Изображение из localStorage:', src);
                 modal.find('#modalCardId').text('ID карты: ' + cardId);
                 modal.find('#modalImage').attr('src', cachedImage);
                 modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
             } else {
-                // ❌ Изображения нет в кеше - загружаем с сервера
+                // ❌ Изображения нет в кеше - показываем ошибку или загружаем
+                console.log('❌ Изображение не найдено в localStorage:', src);
 
-                // Показываем индикатор загрузки
-                console.log('⏳ Загрузка изображения с сервера:', src);
-                modal.find('#modalImage').attr('src', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMjAiIHN0cm9rZT0iIzAwN2JmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjEwIDEwIj4KPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ic3Ryb2tlLWRhc2hvZmZzZXQiIHZhbHVlcz0iMTAwIDA7MTAwIDA7MTAwIDA7MDtDMCAxMDAiIGR1cj0iMXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+CjwvY2lyY2xlPgo8L3N2Zz4=');
-                modal.find('#modalImage').attr('alt', 'Загрузка...');
-                modal.find('#modalCardId').text('ID карты: ' + cardId + ' (загрузка...)');
+                if (navigator.onLine) {
+                    // Только при интернете пробуем загрузить
+                    console.log('🌐 Загрузка отсутствующего изображения:', src);
 
-                // Асинхронная загрузка изображения
-                loadAndCacheImage(src)
-                    .then(function(base64Image) {
-                        // Изображение успешно загружено и закешировано
-                        console.log('✅ Изображение загружено и показано:', src);
-                        modal.find('#modalImage').attr('src', base64Image);
-                        modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-                        modal.find('#modalCardId').text('ID карты: ' + cardId);
-                    })
-                    .catch(function(error) {
-                        // Ошибка загрузки
-                        console.error('❌ Не удалось загрузить изображение:', src, error);
-                        modal.find('#modalImage').attr('src', '');
-                        modal.find('#modalImage').attr('alt', 'Ошибка загрузки скриншота');
-                        modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка)');
+                    // Показываем индикатор загрузки
+                    modal.find('#modalImage').attr('src', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMjAiIHN0cm9rZT0iIzAwN2JmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjEwIDEwIj4KPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ic3Ryb2tlLWRhc2hvZmZzZXQiIHZhbHVlcz0iMTAwIDA7MTAwIDA7MTAwIDA7MDtDMCAxMDAiIGR1cj0iMXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+CjwvY2lyY2xlPgo8L3N2Zz4=');
+                    modal.find('#modalImage').attr('alt', 'Загрузка...');
+                    modal.find('#modalCardId').text('ID карты: ' + cardId + ' (загрузка...)');
 
-                        // Показываем пользователю сообщение об ошибке
-                        alert('Не удалось загрузить скриншот. Проверьте подключение к интернету.');
-                    });
+                    // Загружаем изображение
+                    loadAndCacheImage(src)
+                        .then(function(base64Image) {
+                            console.log('✅ Изображение загружено и показано:', src);
+                            modal.find('#modalImage').attr('src', base64Image);
+                            modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
+                            modal.find('#modalCardId').text('ID карты: ' + cardId);
+                        })
+                        .catch(function(error) {
+                            console.error('❌ Ошибка загрузки изображения:', src, error);
+                            modal.find('#modalImage').attr('src', '');
+                            modal.find('#modalImage').attr('alt', 'Ошибка загрузки скриншота');
+                            modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка)');
+                        });
+                } else {
+                    // Нет интернета и нет кеша
+                    modal.find('#modalImage').attr('alt', 'Скриншот недоступен (оффлайн режим)');
+                    modal.find('#modalImage').attr('src', '');
+                    modal.find('#modalCardId').text('ID карты: ' + cardId + ' (недоступно)');
+                }
             }
         });
     </script>
+
+    <style>
+    .image-loader-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        color: white;
+    }
+
+    .image-loader-content {
+        text-align: center;
+        max-width: 300px;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #007bff;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .progress-text {
+        font-size: 18px;
+        font-weight: bold;
+        margin-top: 10px;
+    }
+
+    .image-loader-overlay p {
+        font-size: 16px;
+        margin: 10px 0;
+    }
+    </style>
 
 </div>

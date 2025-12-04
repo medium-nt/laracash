@@ -1,8 +1,16 @@
 // Safari Compatible Service Worker - Fixed Version
-const CACHE_VERSION = 'laracash-safari-v2';
+const CACHE_VERSION = 'laracash-safari-v3';
 const CACHE_NAME = 'laracash-safari-cache';
 
-// Основные файлы для кеширования
+// URL которые никогда не должны кешироваться
+const NEVER_CACHE_PATTERNS = [
+    '/search/',
+    '/livewire/',
+    '/api/',
+    '/storage/card_cashback_image/'
+];
+
+// Основные файлы для кеширования (только статические ресурсы)
 const CACHE_URLS = [
     '/css/app.css',
     '/js/app.js',
@@ -70,8 +78,41 @@ self.addEventListener('fetch', function(event) {
     );
 });
 
+// Проверяем является ли запрос к странице поиска
+function isSearchPage(url) {
+    return url.indexOf('/search/') !== -1 || url.match(/\/search\/[a-zA-Z0-9]+/);
+}
+
 // Функция обработки запросов
 function handleRequest(request) {
+    // Для URL которые никогда не кешируются - только сеть
+    if (shouldNeverCache(request.url)) {
+        console.log('🌐 Safari SW: Network only:', request.url);
+        return fetch(request);
+    }
+
+    // Для страниц поиска - Network First (всегда свежие данные)
+    if (isSearchPage(request.url)) {
+        console.log('🔍 Safari SW: Search page Network First:', request.url);
+        return networkFirst(request);
+    }
+
+    // Для HTML страниц - Network First
+    if (isHTMLPage(request.url)) {
+        return networkFirst(request);
+    }
+
+    // Для статических файлов - Cache First
+    if (isStaticFile(request.url)) {
+        return cacheFirst(request);
+    }
+
+    // Для всего остального - Cache First
+    return cacheFirst(request);
+}
+
+// Cache First для Safari
+function cacheFirst(request) {
     return caches.match(request)
         .then(function(cachedResponse) {
             // Если есть в кеше - возвращаем из кеша
@@ -87,23 +128,55 @@ function handleRequest(request) {
 
                     // Кешируем успешные GET запросы
                     if (networkResponse.ok && request.method === 'GET') {
-                        if (shouldCache(request.url)) {
-                            var responseClone = networkResponse.clone();
-                            caches.open(CACHE_NAME)
-                                .then(function(cache) {
-                                    cache.put(request, responseClone);
-                                })
-                                .catch(function(error) {
-                                    console.log('Safari SW: Cache put error:', error);
-                                });
-                        }
+                        var responseClone = networkResponse.clone();
+                        caches.open(CACHE_NAME)
+                            .then(function(cache) {
+                                cache.put(request, responseClone);
+                            })
+                            .catch(function(error) {
+                                console.log('Safari SW: Cache put error:', error);
+                            });
                     }
                     return networkResponse;
                 })
                 .catch(function(error) {
                     console.log('Safari SW: Network failed:', request.url);
+                    throw error;
+                });
+        });
+}
 
-                    // Для HTML запросов - пробуем найти PWA страницу
+// Network First для Safari
+function networkFirst(request) {
+    return fetch(request)
+        .then(function(networkResponse) {
+            console.log('🌐 Safari SW: HTML from network:', request.url);
+
+            // Кешируем успешные ответы для оффлайн режима
+            if (networkResponse.ok && request.method === 'GET') {
+                var responseClone = networkResponse.clone();
+                caches.open(CACHE_NAME)
+                    .then(function(cache) {
+                        cache.put(request, responseClone);
+                    })
+                    .catch(function(error) {
+                        console.log('Safari SW: Cache put error:', error);
+                    });
+            }
+            return networkResponse;
+        })
+        .catch(function(error) {
+            console.log('📦 Safari SW: Network failed, trying cache:', request.url);
+
+            // Пробуем достать из кеша
+            return caches.match(request)
+                .then(function(cachedResponse) {
+                    if (cachedResponse) {
+                        console.log('✅ Safari SW: HTML from cache fallback:', request.url);
+                        return cachedResponse;
+                    }
+
+                    // Если нет в кеше и нет сети - пробуем найти PWA страницу
                     if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
                         return getOfflinePWAPage();
                     }
@@ -114,19 +187,6 @@ function handleRequest(request) {
                         statusText: 'Service Unavailable'
                     });
                 });
-        })
-        .catch(function(error) {
-            console.error('Safari SW: Cache match error:', error);
-
-            // Для HTML запросов - пробуем найти PWA страницу
-            if (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) {
-                return getOfflinePWAPage();
-            }
-
-            return new Response('Service Unavailable', {
-                status: 503,
-                statusText: 'Service Unavailable'
-            });
         });
 }
 
@@ -187,8 +247,22 @@ function getOfflinePWAPage() {
         });
 }
 
-// Проверяем нужно ли кешировать файл
-function shouldCache(url) {
+// Проверяем нужно ли никогда не кешировать URL
+function shouldNeverCache(url) {
+    return NEVER_CACHE_PATTERNS.some(function(pattern) {
+        return url.indexOf(pattern) !== -1;
+    });
+}
+
+// Проверяем является ли запрос к HTML странице
+function isHTMLPage(url) {
+    return url.indexOf('.html') !== -1 ||
+           url.endsWith('/') ||
+           (!url.includes('.') && url.indexOf('/vendor/') === -1 && url.indexOf('/icons/') === -1);
+}
+
+// Проверяем является ли запрос к статическим файлам
+function isStaticFile(url) {
     // Базовые файлы приложения
     var fileExtensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.svg', '.ico', '.woff', '.woff2'];
     var hasCacheableExtension = fileExtensions.some(function(ext) {
@@ -201,10 +275,7 @@ function shouldCache(url) {
         return url.indexOf(path) !== -1;
     });
 
-    // или это главная страница поиска
-    var isSearchPage = url.match(/\/search\/[a-zA-Z0-9]+/) || url.indexOf('/search/') !== -1;
-
-    return hasCacheableExtension || hasCacheablePath || isSearchPage;
+    return hasCacheableExtension || hasCacheablePath;
 }
 
 // HTML для офлайн индикатора
