@@ -1,5 +1,5 @@
 // Safari Compatible Service Worker - Fixed Version
-const CACHE_VERSION = 'laracash-safari-v4';
+const CACHE_VERSION = 'laracash-safari-v5-search-only';
 const CACHE_NAME = 'laracash-safari-cache';
 
 // URL которые никогда не должны кешироваться
@@ -84,6 +84,22 @@ function isSearchPage(url) {
 
 // Функция обработки запросов
 function handleRequest(request) {
+    var refererUrl = request.referrer;
+
+    // Проверяем относится ли запрос к контексту страницы поиска
+    if (!isSearchPageContext(request.url, refererUrl)) {
+        // Пропускаем не-поисковые запросы - не обрабатываем их сервис-воркером
+        return fetch(request).catch(function(error) {
+            return new Response('Service Unavailable', {
+                status: 503,
+                statusText: 'Service Unavailable',
+                headers: {
+                    'Content-Type': 'text/plain'
+                }
+            });
+        });
+    }
+
     // Для URL которые никогда не кешируются - только сеть
     if (shouldNeverCache(request.url)) {
         console.log('🌐 Safari SW: Network only:', request.url);
@@ -320,6 +336,41 @@ function isStaticFile(url) {
     });
 
     return hasCacheableExtension || hasCacheablePath;
+}
+
+// Проверяем относится ли запрос к контексту страницы поиска (Safari версия)
+function isSearchPageContext(requestUrl, refererUrl) {
+    var url;
+
+    try {
+        url = new URL(requestUrl);
+    } catch (e) {
+        return false;
+    }
+
+    // 1. Если сам URL относится к поисковой странице
+    if (url.pathname === '/search' || url.pathname.indexOf('/search/') === 0) {
+        return true;
+    }
+
+    // 2. Если есть реферер и он с поисковой страницы
+    if (refererUrl) {
+        try {
+            var referer = new URL(refererUrl);
+            if (referer.pathname === '/search' || referer.pathname.indexOf('/search/') === 0) {
+                return true;
+            }
+        } catch (e) {
+            // Игнорируем невалидный реферер
+        }
+    }
+
+    // 3. Если это статический ресурс, который может быть запрошен со страницы поиска
+    if (isStaticFile(requestUrl)) {
+        return true;
+    }
+
+    return false;
 }
 
 // HTML для офлайн индикатора

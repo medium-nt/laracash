@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'laracash-v4';
+const CACHE_VERSION = 'laracash-v5-search-only';
 const CACHE_NAME = 'laracash-cache';
 
 // URL которые никогда не должны кешироваться
@@ -102,8 +102,15 @@ self.addEventListener('fetch', event => {
 // Основная функция обработки запросов
 async function handleRequest(request) {
     const url = new URL(request.url);
+    const refererUrl = request.referrer;
 
     try {
+        // 0. Проверяем относится ли запрос к контексту страницы поиска
+        if (!isSearchPageContext(request.url, refererUrl)) {
+            // Пропускаем не-поисковые запросы - не обрабатываем их сервис-воркером
+            return await fetch(request);
+        }
+
         // 1. Для URL которые никогда не кешируются - только сеть
         if (shouldNeverCache(request.url)) {
             return await networkOnly(request);
@@ -114,7 +121,7 @@ async function handleRequest(request) {
             return await networkFirst(request);
         }
 
-        // 3. Для остальных HTML страниц - Network First
+        // 3. Для HTML страниц в контексте поиска - Network First
         if (isHTMLPage(request.url)) {
             return await networkFirst(request);
         }
@@ -270,6 +277,35 @@ function isStaticFile(url) {
            url.endsWith('.ico') ||
            url.endsWith('.woff') ||
            url.endsWith('.woff2');
+}
+
+// Проверяем относится ли запрос к контексту страницы поиска
+function isSearchPageContext(requestUrl, refererUrl) {
+    const url = new URL(requestUrl);
+
+    // 1. Если сам URL относится к поисковой странице
+    if (url.pathname === '/search' || url.pathname.startsWith('/search/')) {
+        return true;
+    }
+
+    // 2. Если есть реферер и он с поисковой страницы
+    if (refererUrl) {
+        try {
+            const referer = new URL(refererUrl);
+            if (referer.pathname === '/search' || referer.pathname.startsWith('/search/')) {
+                return true;
+            }
+        } catch (e) {
+            // Игнорируем невалидный реферер
+        }
+    }
+
+    // 3. Если это статический ресурс, который может быть запрошен со страницы поиска
+    if (isStaticFile(requestUrl)) {
+        return true;
+    }
+
+    return false;
 }
 
 // HTML для оффлайн страницы
