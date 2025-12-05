@@ -626,12 +626,12 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(255, 255, 255, 0.95);
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 10000;
-    color: white;
+    color: #333;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -639,21 +639,22 @@
     text-align: center;
     max-width: 450px;
     padding: 30px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.9);
     backdrop-filter: blur(10px);
     border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 }
 
 .page-loader-content h3 {
     margin: 20px 0;
     font-size: 24px;
     font-weight: 600;
-    color: #ffffff;
+    color: #333;
 }
 
 .spinner {
-    border: 4px solid rgba(255, 255, 255, 0.3);
+    border: 4px solid rgba(0, 123, 255, 0.1);
     border-top: 4px solid #007bff;
     border-radius: 50%;
     width: 60px;
@@ -678,22 +679,25 @@
     padding: 15px;
     margin: 10px 0;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.03);
     border-left: 4px solid transparent;
     transition: all 0.3s ease;
     font-size: 14px;
+    color: #555;
 }
 
 .stage.active {
-    background: rgba(0, 123, 255, 0.2);
+    background: rgba(0, 123, 255, 0.1);
     border-left-color: #007bff;
-    box-shadow: 0 0 20px rgba(0, 123, 255, 0.3);
+    box-shadow: 0 2px 10px rgba(0, 123, 255, 0.2);
+    color: #0056b3;
 }
 
 .stage.complete {
-    background: rgba(40, 167, 69, 0.2);
+    background: rgba(40, 167, 69, 0.1);
     border-left-color: #28a745;
-    box-shadow: 0 0 20px rgba(40, 167, 69, 0.3);
+    box-shadow: 0 2px 10px rgba(40, 167, 69, 0.2);
+    color: #1e7e34;
 }
 
 .stage-icon {
