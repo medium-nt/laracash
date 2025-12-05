@@ -28,5 +28,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('is-admin', function (User $user) {
             return $user->role->name === 'admin';
         });
+
+        Gate::define('viewLogViewer', function (User $user) {
+            return $user->isAdmin();
+        });
     }
 }

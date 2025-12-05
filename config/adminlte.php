@@ -340,7 +340,14 @@ return [
                     'url' => 'feedback',
                 ],
             ],
-        ]
+        ],
+        [
+            'text' => 'logs',
+            'url' => 'log',
+            'icon' => 'fas fa-fw fa-history',
+            'target' => '_blank',
+            'can' => 'is-admin',
+        ],
     ],
 
     /*
