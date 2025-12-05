@@ -151,7 +151,6 @@
                 var cacheKey = 'cashback_img_' + imagePath;
                 // Сохраняем изображение в localStorage
                 localStorage.setItem(cacheKey, base64Data);
-                console.log('Изображение сохранено в кеш:', imagePath);
             } catch (error) {
                 console.error('Ошибка при сохранении изображения в кеш:', error);
             }
@@ -167,8 +166,6 @@
                 // Полный URL к изображению с версионированием для обхода кеша
                 var timestamp = Date.now();
                 var fullUrl = '/storage/card_cashback_image/' + imagePath + '?v=' + timestamp;
-
-                console.log('Загрузка изображения:', fullUrl);
 
                 // Создаем новый Image объект для загрузки
                 var img = new Image();
@@ -190,7 +187,6 @@
                     // Сохраняем в кеш
                     saveImageToCache(imagePath, base64);
 
-                    console.log('Изображение успешно загружено и сохранено:', imagePath);
                     resolve(base64);
                 };
 
@@ -209,7 +205,6 @@
          */
         function clearImageCache() {
             try {
-                console.log('🗑️ Очистка кеша изображений...');
                 var keys = Object.keys(localStorage);
                 var removedCount = 0;
 
@@ -220,7 +215,6 @@
                     }
                 });
 
-                console.log('✅ Удалено изображений из кеша:', removedCount);
                 return removedCount;
             } catch (error) {
                 console.error('❌ Ошибка при очистке кеша изображений:', error);
@@ -233,8 +227,6 @@
          * Загружает ВСЕ изображения заново при наличии интернета
          */
         function blockingCacheAllImages() {
-            console.log('🔄 Начало блокирующей загрузки изображений...');
-
             // Находим все элементы с атрибутом data-cashback-image
             var elements = document.querySelectorAll('[data-cashback-image]');
 
@@ -252,10 +244,7 @@
                 }
             });
 
-            console.log('Найдено уникальных изображений для загрузки:', uniqueImagePaths.length);
-
             if (uniqueImagePaths.length === 0) {
-                console.log('📸 Нет изображений для загрузки');
                 return Promise.resolve();
             }
 
@@ -275,7 +264,6 @@
                     .then(function() {
                         loadedCount++;
                         progressText.textContent = loadedCount;
-                        console.log('✅ Загружено (' + loadedCount + '/' + uniqueImagePaths.length + '):', imagePath);
                     })
                     .catch(function(error) {
                         loadedCount++;
@@ -288,12 +276,10 @@
             // Ждем завершения всех загрузок
             return Promise.allSettled(loadPromises)
                 .then(function() {
-                    console.log('🎉 Все изображения загружены!');
                     // Скрываем loader
                     loader.style.display = 'none';
                 })
                 .catch(function() {
-                    console.log('⚠️ Загрузка завершена с ошибками');
                     // Все равно скрываем loader
                     loader.style.display = 'none';
                 });
@@ -304,8 +290,6 @@
          * Находит все элементы с data-cashback-image и загружает отсутствующие в кеш
          */
         function cacheCashbackImages() {
-            console.log('Начало кеширования изображений...');
-
             // Находим все элементы с атрибутом data-cashback-image
             var elements = document.querySelectorAll('[data-cashback-image]');
 
@@ -321,8 +305,6 @@
                 }
             });
 
-            console.log('Найдено уникальных изображений:', uniqueImagePaths.size);
-
             // Загружаем изображения в фоне (асинхронно)
             var loadPromises = [];
 
@@ -331,26 +313,18 @@
                 var cachedImage = getCachedImage(imagePath);
 
                 if (!cachedImage) {
-                    console.log('Изображение не найдено в кеше, загружаем:', imagePath);
                     // Добавляем Promise в массив загрузок
                     var loadPromise = loadAndCacheImage(imagePath)
-                        .then(function() {
-                            console.log('✅ Изображение закешировано:', imagePath);
-                        })
                         .catch(function(error) {
                             console.error('❌ Ошибка кеширования изображения:', imagePath, error);
                         });
 
                     loadPromises.push(loadPromise);
-                } else {
-                    console.log('✅ Изображение уже в кеше:', imagePath);
                 }
             });
 
             // Ждем завершения всех загрузок
-            Promise.allSettled(loadPromises).then(function() {
-                console.log('🎉 Кеширование изображений завершено!');
-            });
+            Promise.allSettled(loadPromises);
         }
 
         /**
@@ -358,37 +332,13 @@
          * NOTE: Основная логика загрузки и очистки теперь в search/index.blade.php
          */
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🔄 SearchComponent: Инициализация...');
-            console.log('📦 Очистка и загрузка изображений управляется в search/index.blade.php');
-
             // Проверяем наличие элементов с data-cashback-image
             var cashbackElements = document.querySelectorAll('[data-cashback-image]');
-            console.log('🔍 SearchComponent: Найдено элементов с data-cashback-image:', cashbackElements.length);
 
-            cashbackElements.forEach(function(element, index) {
-                console.log('🔍 Элемент ' + index + ':', {
-                    src: element.getAttribute('data-cashback-image'),
-                    cardId: element.getAttribute('data-card-id'),
-                    hasModalTarget: element.getAttribute('data-target') === '#cashbackModal',
-                    hasToggle: element.getAttribute('data-toggle') === 'modal'
-                });
-            });
-
-            // Проверяем наличие модального окна
-            var modal = document.getElementById('cashbackModal');
-            console.log('🔍 SearchComponent: Модальное окно #cashbackModal найдено:', !!modal);
-
-            // Проверяем наличие изображения в модальном окне
-            var modalImage = document.getElementById('modalImage');
-            console.log('🔍 SearchComponent: Изображение #modalImage найдено:', !!modalImage);
-
-            // Небольшая задержка чтобы search/index успел выполниться первым
-            setTimeout(function() {
-                console.log('🔄 SearchComponent: Ожидание завершения инициализации search/index...');
-            }, 100);
+            if (cashbackElements.length === 0) {
+                console.warn('⚠️ Не найдено элементов с data-cashback-image');
+            }
         });
-
-        // NOTE: Слушатели онлайн/офлайн перенесены в search/index.blade.php
 
         /**
          * Управление оффлайн режимом для поиска
@@ -410,13 +360,13 @@
                 this.waitForLivewire();
 
                 // Обработчики событий онлайн/офлайн
-                window.addEventListener('online', () => this.handleOnline());
-                window.addEventListener('offline', () => this.handleOffline());
+                window.addEventListener('online', this.handleOnline.bind(this));
+                window.addEventListener('offline', this.handleOffline.bind(this));
 
                 // Обработчик ввода в поиске
                 if (this.searchInput) {
-                    this.searchInput.addEventListener('input', (e) => this.handleSearchInput(e));
-                    this.searchInput.addEventListener('focus', () => this.handleSearchFocus());
+                    this.searchInput.addEventListener('input', this.handleSearchInput.bind(this));
+                    this.searchInput.addEventListener('focus', this.handleSearchFocus.bind(this));
                 }
 
                 // Проверяем реальный статус сети перед обновлением UI
@@ -434,7 +384,6 @@
                         if (livewireElement && livewireElement.wireId) {
                             self.livewireComponent = Livewire.find(livewireElement.wireId);
                             if (self.livewireComponent) {
-                                console.log('✅ OfflineSearchManager: Livewire компонент найден');
                                 return;
                             }
                         }
@@ -445,8 +394,6 @@
                     attempts++;
                     if (attempts < maxAttempts) {
                         setTimeout(checkLivewire, 100);
-                    } else {
-                        console.warn('⚠️ OfflineSearchManager: Livewire компонент не найден');
                     }
                 }
 
@@ -454,14 +401,12 @@
             }
 
             handleOnline() {
-                console.log('🌐 Сеть появилась, включаю поиск');
                 this.isOnline = true;
                 this.updateUI();
                 this.enableLivewireSearch();
             }
 
             handleOffline() {
-                console.log('📶 Сеть пропала, отключаю поиск');
                 this.isOnline = false;
                 this.updateUI();
                 this.disableLivewireSearch();
@@ -498,8 +443,6 @@
                     // Отключаем Livewire реактивность для поиска
                     this.livewireComponent.set('search', '');
                     this.livewireComponent.removeProperty('search');
-
-                    console.log('✅ Livewire поиск отключен');
                 } catch (error) {
                     console.error('❌ Ошибка отключения Livewire поиска:', error);
                 }
@@ -511,8 +454,6 @@
                 try {
                     // Включаем Livewire реактивность обратно
                     this.livewireComponent.addProperty('search');
-
-                    console.log('✅ Livewire поиск включен');
                 } catch (error) {
                     console.error('❌ Ошибка включения Livewire поиска:', error);
                 }
@@ -546,8 +487,6 @@
 
                 try {
                     window.checkNetworkConnectivity().then(function(isOnline) {
-                        console.log('🔍 Проверка сети:', isOnline ? 'Онлайн' : 'Офлайн');
-
                         if (self.isOnline !== isOnline) {
                             self.isOnline = isOnline;
                             self.updateUI();
@@ -602,14 +541,11 @@
             }, 1000);
         });
 
-        // Глобальная функция проверки сети больше не нужна - она перенесена в класс
-
         /**
          * Простая логика модального окна - используем изображения из localStorage
          * Используем делегирование событий для динамических элементов
          */
         $(document).on('click', '[data-toggle="modal"][data-target="#cashbackModal"]', function (event) {
-            console.log('🖱️ Клик по элементу модального окна detected!');
             event.preventDefault();
 
             var trigger = $(this);
@@ -617,11 +553,8 @@
             var src = trigger.data('cashback-image');
             var modal = $('#cashbackModal');
 
-            console.log('🔍 Modal Click: cardId =', cardId, 'src =', src);
-
             // Проверяем есть ли путь к изображению
             if (src === '') {
-                console.log('❌ Modal Click: Путь к изображению пустой');
                 modal.find('#modalImage').attr('alt', 'Скриншот карты не найден');
                 modal.find('#modalImage').attr('src', '');
                 modal.find('#modalCardId').text('ID карты: ' + cardId);
@@ -633,65 +566,24 @@
 
             var cachedImage = getCachedImage(src);
 
-            // Детальное логирование для отладки
-            console.log('🔍 Modal Click: Проверка изображения для src:', src);
-            console.log('🔍 Modal Click: Проверка localStorage...');
-
-            // Проверяем все ключи в localStorage
-            var allKeys = Object.keys(localStorage).filter(function(key) {
-                return key.startsWith('cashback_img_');
-            });
-            console.log('🔍 Modal Click: Все ключи изображений в localStorage:', allKeys);
-
-            console.log('🔍 Modal Click: Найденный кеш:', cachedImage ? 'Да' : 'Нет');
-            if (cachedImage) {
-                console.log('🔍 Modal Click: Длина кеша:', cachedImage.length, 'первые 100 символов:', cachedImage.substring(0, 100));
-            }
-
             if (cachedImage) {
                 // ✅ Изображение есть в localStorage - показываем сразу
-                console.log('📦 Modal Click: Изображение найдено в localStorage:', src);
-
-                // Проверяем что элементы модального окна существуют
-                var modalImage = modal.find('#modalImage');
-                console.log('🔍 Modal Click: Элемент #modalImage найден:', modalImage.length > 0);
-
-                if (modalImage.length > 0) {
-                    console.log('🔍 Modal Click: Устанавливаем src в #modalImage');
-                    modal.find('#modalCardId').text('ID карты: ' + cardId);
-                    modal.find('#modalImage').attr('src', cachedImage);
-                    modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-
-                    // Проверяем что src установился
-                    setTimeout(function() {
-                        var finalSrc = modal.find('#modalImage').attr('src');
-                        console.log('🔍 Modal Click: Финальный src изображения:', finalSrc ? 'Установлен' : 'Пустой');
-                    }, 100);
-
-                    modal.modal('show');
-                } else {
-                    console.error('❌ Modal Click: Элемент #modalImage не найден!');
-                }
+                modal.find('#modalCardId').text('ID карты: ' + cardId);
+                modal.find('#modalImage').attr('src', cachedImage);
+                modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
+                modal.modal('show');
             } else {
-                // ❌ Изображения нет в кеше - показываем ошибку или загружаем
-                console.log('❌ Modal Click: Изображение не найдено в localStorage:', src);
-
-                // Дополнительная проверка - пробуем найти с полным ключом
+                // ❌ Изображения нет в кеше - пробуем прямой доступ
                 var directKey = 'cashback_img_' + src;
                 var directCache = localStorage.getItem(directKey);
-                console.log('🔍 Modal Click: Прямой доступ по ключу', directKey, ':', directCache ? 'Найдено' : 'Не найдено');
 
                 if (directCache) {
-                    console.log('🔍 Modal Click: Используем прямой доступ из localStorage');
                     modal.find('#modalImage').attr('src', directCache);
                     modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
                     modal.find('#modalCardId').text('ID карты: ' + cardId);
                     modal.modal('show');
                 } else if (navigator.onLine) {
                     // Только при интернете пробуем загрузить
-                    console.log('🌐 Modal Click: Загрузка отсутствующего изображения:', src);
-
-                    // Показываем индикатор загрузки
                     modal.find('#modalImage').attr('src', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMjAiIHN0cm9rZT0iIzAwN2JmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjEwIDEwIj4KPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ic3Ryb2tlLWRhc2hvZmZzZXQiIHZhbHVlcz0iMTAwIDA7MTAwIDA7MTAwIDA7MDtDMCAxMDAiIGR1cj0iMXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+CjwvY2lyY2xlPgo8L3N2Zz4=');
                     modal.find('#modalImage').attr('alt', 'Загрузка...');
                     modal.find('#modalCardId').text('ID карты: ' + cardId + ' (загрузка...)');
@@ -700,137 +592,23 @@
                     // Загружаем изображение (используем глобальную функцию)
                     window.loadAndCacheImage(src)
                         .then(function(base64Image) {
-                            console.log('✅ Modal Click: Изображение загружено и показано:', src);
                             modal.find('#modalImage').attr('src', base64Image);
                             modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
                             modal.find('#modalCardId').text('ID карты: ' + cardId);
                         })
                         .catch(function(error) {
-                            console.error('❌ Modal Click: Ошибка загрузки изображения:', src, error);
+                            console.error('❌ Ошибка загрузки изображения:', src, error);
                             modal.find('#modalImage').attr('src', '');
                             modal.find('#modalImage').attr('alt', 'Ошибка загрузки скриншота');
                             modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка)');
                         });
                 } else {
-                    // Нет интернета и нет кеша - критическая ситуация!
-                    console.error('❌ Modal Click: КРИТИЧЕСКАЯ ОШИБКА - НЕТ ИЗОБРАЖЕНИЯ В КЕШЕ И НЕТ ИНТЕРНЕТА!');
-                    console.log('🔍 Modal Click: src для поиска:', src);
-                    console.log('🔍 Modal Click: Прямая проверка localStorage.getItem(\'cashback_img_\' + src):', localStorage.getItem('cashback_img_' + src));
-
-                    modal.find('#modalImage').attr('alt', 'Скриншот не найден! (проверьте консоль)');
+                    // Нет интернета и нет кеша
+                    modal.find('#modalImage').attr('alt', 'Скриншот не найден (оффлайн)');
                     modal.find('#modalImage').attr('src', '');
-                    modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка кеша!)');
+                    modal.find('#modalCardId').text('ID карты: ' + cardId + ' (оффлайн)');
                     modal.modal('show');
                 }
-            }
-        });
-
-        /**
-         * Fallback обработчик для старого события show.bs.modal на всякий случай
-         */
-        $('#cashbackModal').on('show.bs.modal', function (event) {
-            console.log('🔄 Fallback: show.bs.modal событие вызвано');
-            var trigger = $(event.relatedTarget);
-            var cardId = trigger.data('card-id');
-            var src = trigger.data('cashback-image');
-            var modal = $(this);
-
-            // Проверяем есть ли путь к изображению
-            if (src === '') {
-                modal.find('#modalImage').attr('alt', 'Скриншот карты не найден');
-                modal.find('#modalImage').attr('src', '');
-                return; // Выходим если нет изображения
-            }
-
-            // --- ПРОСТАЯ ЛОГИКА: ИСПОЛЬЗУЕМ ЛОКАЛЬНЫЙ КЕШ ---
-
-            var cachedImage = getCachedImage(src);
-
-            // Детальное логирование для отладки
-            console.log('🔍 Модальное окно: Проверка изображения для src:', src);
-            console.log('🔍 Модальное окно: Проверка localStorage...');
-
-            // Проверяем все ключи в localStorage
-            var allKeys = Object.keys(localStorage).filter(function(key) {
-                return key.startsWith('cashback_img_');
-            });
-            console.log('🔍 Модальное окно: Все ключи изображений в localStorage:', allKeys);
-
-            console.log('🔍 Модальное окно: Найденный кеш:', cachedImage ? 'Да' : 'Нет');
-            if (cachedImage) {
-                console.log('🔍 Модальное окно: Длина кеша:', cachedImage.length, 'первые 100 символов:', cachedImage.substring(0, 100));
-            }
-
-            if (cachedImage) {
-                // ✅ Изображение есть в localStorage - показываем сразу
-                console.log('📦 Модальное окно: Изображение найдено в localStorage:', src);
-
-                // Проверяем что элементы модального окна существуют
-                var modalImage = modal.find('#modalImage');
-                console.log('🔍 Модальное окно: Элемент #modalImage найден:', modalImage.length > 0);
-
-                if (modalImage.length > 0) {
-                    console.log('🔍 Модальное окно: Устанавливаем src в #modalImage');
-                    modal.find('#modalCardId').text('ID карты: ' + cardId);
-                    modal.find('#modalImage').attr('src', cachedImage);
-                    modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-
-                    // Проверяем что src установился
-                    setTimeout(function() {
-                        var finalSrc = modal.find('#modalImage').attr('src');
-                        console.log('🔍 Модальное окно: Финальный src изображения:', finalSrc ? 'Установлен' : 'Пустой');
-                    }, 100);
-                } else {
-                    console.error('❌ Модальное окно: Элемент #modalImage не найден!');
-                }
-            } else {
-                // ❌ Изображения нет в кеше - показываем ошибку или загружаем
-                console.log('❌ Модальное окно: Изображение не найдено в localStorage:', src);
-
-                // Дополнительная проверка - пробуем найти с полным ключом
-                var directKey = 'cashback_img_' + src;
-                var directCache = localStorage.getItem(directKey);
-                console.log('🔍 Модальное окно: Прямой доступ по ключу', directKey, ':', directCache ? 'Найдено' : 'Не найдено');
-
-                if (directCache) {
-                    console.log('🔍 Модальное окно: Используем прямой доступ из localStorage');
-                    modal.find('#modalImage').attr('src', directCache);
-                    modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-                }
-            }
-
-            if (navigator.onLine) {
-                // Только при интернете пробуем загрузить
-                console.log('🌐 Загрузка отсутствующего изображения:', src);
-
-                // Показываем индикатор загрузки
-                modal.find('#modalImage').attr('src', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMjAiIHN0cm9rZT0iIzAwN2JmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjEwIDEwIj4KPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ic3Ryb2tlLWRhc2hvZmZzZXQiIHZhbHVlcz0iMTAwIDA7MTAwIDA7MTAwIDA7MDtDMCAxMDAiIGR1cj0iMXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+CjwvY2lyY2xlPgo8L3N2Zz4=');
-                modal.find('#modalImage').attr('alt', 'Загрузка...');
-                modal.find('#modalCardId').text('ID карты: ' + cardId + ' (загрузка...)');
-
-                // Загружаем изображение (используем глобальную функцию)
-                window.loadAndCacheImage(src)
-                    .then(function(base64Image) {
-                        console.log('✅ Изображение загружено и показано:', src);
-                        modal.find('#modalImage').attr('src', base64Image);
-                        modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-                        modal.find('#modalCardId').text('ID карты: ' + cardId);
-                    })
-                    .catch(function(error) {
-                        console.error('❌ Ошибка загрузки изображения:', src, error);
-                        modal.find('#modalImage').attr('src', '');
-                        modal.find('#modalImage').attr('alt', 'Ошибка загрузки скриншота');
-                        modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка)');
-                    });
-            } else {
-                // Нет интернета и нет кеша - критическая ситуация!
-                console.error('❌ Модальное окно: КРИТИЧЕСКАЯ ОШИБКА - НЕТ ИЗОБРАЖЕНИЯ В КЕШЕ И НЕТ ИНТЕРНЕТА!');
-                console.log('🔍 Модальное окно: src для поиска:', src);
-                console.log('🔍 Модальное окно: Прямая проверка localStorage.getItem(\'cashback_img_\' + src):', localStorage.getItem('cashback_img_' + src));
-
-                modal.find('#modalImage').attr('alt', 'Скриншот не найден! (проверьте консоль)');
-                modal.find('#modalImage').attr('src', '');
-                modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка кеша!)');
             }
         });
     </script>
