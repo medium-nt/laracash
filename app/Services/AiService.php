@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Card;
 use App\Models\Category;
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -85,8 +86,38 @@ class AiService
             ]);
 
             if ($response->clientError()) {
-                // 4xx
-                return false;
+                // Если ошибка 401 (недействительный токен), пробуем обновить
+                if ($response->status() === 401) {
+                    $newToken = self::refreshToken();
+                    if ($newToken) {
+                        // Повторяем запрос с новым токеном
+                        $response = Http::withHeaders([
+                            'Content-Type' => 'application/json',
+                            'Accept' => 'application/json',
+                            'Authorization' => 'Bearer ' . $newToken,
+                        ])->withOptions([
+                            'verify' => false,
+                        ])->post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', [
+                            'model' => 'GigaChat-2-Pro',
+                            'messages' => [
+                                [
+                                    'role' => 'user',
+                                    'content' => self::getPrompt(),
+                                    "attachments" => [
+                                        self::downloadFile($card),
+                                    ]
+                                ]
+                            ],
+                            'stream' => false,
+                            'profanity_check' => true,
+                        ]);
+                    } else {
+                        return false;
+                    }
+                } else {
+                    // Другие 4xx ошибки
+                    return false;
+                }
             }
 
             if ($response->serverError()) {
@@ -114,26 +145,33 @@ class AiService
 
     private static function getToken(): string
     {
-        $response = Http::withHeaders([
-            'Content-Type' => 'application/x-www-form-urlencoded',
-            'Accept' => 'application/json',
-            'RqUID' => (string) Str::uuid(),
-            'Authorization' => 'Basic MDE5OTk2NDYtYmI2ZC03Mjc5LWE1ZGItYTBjMDYxMTdiMDA3Ojk2MDU0N2ZkLTZlOWEtNDA3Ni1hYWEyLThkMDUyMmE2NTY0Zg==',
-        ])->withOptions([
-                'verify' => false,
-            ])
-            ->asForm()->post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', [
-            'scope' => 'GIGACHAT_API_PERS',
-        ]);
+        return Cache::remember('gigachat_token', 1700, function () { // 1700 секунд = 28 минут (меньше чем 30)
+            $response = Http::withHeaders([
+                'Content-Type' => 'application/x-www-form-urlencoded',
+                'Accept' => 'application/json',
+                'RqUID' => (string) Str::uuid(),
+                'Authorization' => 'Basic MDE5OTk2NDYtYmI2ZC03Mjc5LWE1ZGItYTBjMDYxMTdiMDA3Ojk2MDU0N2ZkLTZlOWEtNDA3Ni1hYWEyLThkMDUyMmE2NTY0Zg==',
+            ])->withOptions([
+                    'verify' => false,
+                ])
+                ->asForm()->post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', [
+                'scope' => 'GIGACHAT_API_PERS',
+            ]);
 
-        Log::info('Response token: ' . $response->body());
+            Log::info('Response token: ' . $response->body());
 
-        if (empty($response->json('access_token'))) {
-            return '';
-        }
+            if (empty($response->json('access_token'))) {
+                return '';
+            }
 
+            return $response->json('access_token');
+        });
+    }
 
-        return $response->json('access_token');
+    private static function refreshToken(): string
+    {
+        Cache::forget('gigachat_token');
+        return self::getToken();
     }
 
     public function getRecognizedCashback(Card $card): bool
