@@ -7,7 +7,6 @@ use App\Models\Category;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AiService
@@ -51,11 +50,6 @@ class AiService
             '1.jpg'
         )->post('https://gigachat.devices.sberbank.ru/api/v1/files', [
             'purpose' => 'general',
-        ]);
-
-        Log::info('Response download file:', [
-            'response' => $response->json(),
-            'card' => $card->id,
         ]);
 
         return $response->json('id');
@@ -127,11 +121,6 @@ class AiService
 
             $result = $response->json();
 
-            Log::info('Response recognize cashback:', [
-                'result' => $result,
-                'card' => $card->id,
-            ]);
-
             $decoded = json_decode($result['choices'][0]['message']['content'], true);
 
             $card->cashback_json = $decoded;
@@ -157,8 +146,6 @@ class AiService
                 ->asForm()->post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', [
                 'scope' => 'GIGACHAT_API_PERS',
             ]);
-
-            Log::info('Response token: ' . $response->body());
 
             if (empty($response->json('access_token'))) {
                 return '';

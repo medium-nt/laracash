@@ -35,16 +35,16 @@
     <title>Твой кешбек</title>
 
     <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="{{ asset('/vendor/fontawesome-free/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ secure_asset('/vendor/fontawesome-free/css/all.min.css') }}">
 
     <!-- AdminLTE -->
-    <link href="{{ asset('/vendor/adminlte/dist/css/adminlte.min.css') }}" rel="stylesheet">
+    <link href="{{ secure_asset('/vendor/adminlte/dist/css/adminlte.min.css') }}" rel="stylesheet">
 
     <!-- jQuery -->
-    <script src="{{ asset('/vendor/jquery/jquery.min.js') }}"></script>
+    <script src="{{ secure_asset('/vendor/jquery/jquery.min.js') }}"></script>
 
     <!-- Bootstrap -->
-    <script src="{{ asset('/vendor/bootstrap/js/bootstrap.min.js') }}"></script>
+    <script src="{{ secure_asset('/vendor/bootstrap/js/bootstrap.min.js') }}"></script>
 
     <style>
         body {

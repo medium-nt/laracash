@@ -114,6 +114,7 @@ class CashbackController extends Controller
             );
 
             $card->cashback_image = $filename;
+            $card->cashback_json = null;
             $card->save();
 
             return back()->with('success', 'Изображение сохранено.');
@@ -127,6 +128,7 @@ class CashbackController extends Controller
     public function destroyCashbackImage(Card $card)
     {
         $card->cashback_image = '';
+        $card->cashback_json = null;
         $card->save();
 
         return back()->with('success', 'Изображение удалено.');
