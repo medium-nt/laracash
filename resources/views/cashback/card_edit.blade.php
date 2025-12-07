@@ -153,7 +153,7 @@
                     @else
                         @if($card->cashback_image)
                             <a href="{{ route('cashback.recognize_cashback', ['card' => $card->id]) }}"
-                               class="btn btn-sm btn-primary">
+                               class="btn btn-sm btn-primary recognize-btn">
                                 Распознать
                             </a>
                         @endif
@@ -259,5 +259,14 @@
                 }
             });
         }
+
+        $('.recognize-btn').on('click', function(e) {
+            $(this).hide().after(
+                '<div class="d-inline-flex align-items-center ms-2">' +
+                '<i class="fas fa-spinner fa-spin fa-lg mr-2"></i>' +
+                '<span>Распознаем...</span>' +
+                '</div>'
+            );
+        });
     </script>
 @endpush
