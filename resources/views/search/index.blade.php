@@ -35,16 +35,16 @@
     <title>Твой кешбек</title>
 
     <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="{{ secure_asset('/vendor/fontawesome-free/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('/vendor/fontawesome-free/css/all.min.css') }}">
 
     <!-- AdminLTE -->
-    <link href="{{ secure_asset('/vendor/adminlte/dist/css/adminlte.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('/vendor/adminlte/dist/css/adminlte.min.css') }}" rel="stylesheet">
 
     <!-- jQuery -->
-    <script src="{{ secure_asset('/vendor/jquery/jquery.min.js') }}"></script>
+    <script src="{{ asset('/vendor/jquery/jquery.min.js') }}"></script>
 
     <!-- Bootstrap -->
-    <script src="{{ secure_asset('/vendor/bootstrap/js/bootstrap.min.js') }}"></script>
+    <script src="{{ asset('/vendor/bootstrap/js/bootstrap.min.js') }}"></script>
 
     <style>
         body {
@@ -478,7 +478,8 @@
 
             const dataLoader = new DataLoader('{{ $user->search_token }}');
 
-            // Этап 1: Загрузка свежих данных
+            // Ждем инициализации Livewire для ручного обновления
+            console.log('🔄 Ручное обновление - ждем инициализации Livewire...');
             const dataLoaded = await dataLoader.waitForLivewireAndLoad();
 
             if (dataLoaded) {
@@ -494,23 +495,27 @@
                 const removedCount = clearImageCache();
                 console.log(`🗑️ Очищено ${removedCount} изображений из кеша`);
             }
-            await blockingLoadImagesWithProgress();
 
-            // Этап 3: Завершение
-            document.getElementById('imagesStage').classList.remove('active');
-            document.getElementById('imagesStage').classList.add('complete');
-            document.getElementById('imagesStage').querySelector('.stage-icon').textContent = '✅';
-            document.getElementById('imagesStage').querySelector('.stage-text').textContent = 'Скриншоты загружены';
+            // Ждем немного перед загрузкой изображений, чтобы данные успели примениться
+            setTimeout(async () => {
+                await blockingLoadImagesWithProgress();
 
-            document.getElementById('completeStage').style.display = 'block';
-            document.getElementById('completeStage').classList.add('active');
+                // Этап 3: Завершение
+                document.getElementById('imagesStage').classList.remove('active');
+                document.getElementById('imagesStage').classList.add('complete');
+                document.getElementById('imagesStage').querySelector('.stage-icon').textContent = '✅';
+                document.getElementById('imagesStage').querySelector('.stage-text').textContent = 'Скриншоты загружены';
 
-            // Показываем контент с плавной анимацией
-            setTimeout(() => {
-                pageLoader.style.display = 'none';
-                mainContent.style.opacity = '1';
-                mainContent.style.transition = 'opacity 0.5s ease-in-out';
-                console.log('🎉 Блокирующая загрузка завершена!');
+                document.getElementById('completeStage').style.display = 'block';
+                document.getElementById('completeStage').classList.add('active');
+
+                // Показываем контент с плавной анимацией
+                setTimeout(() => {
+                    pageLoader.style.display = 'none';
+                    mainContent.style.opacity = '1';
+                    mainContent.style.transition = 'opacity 0.5s ease-in-out';
+                    console.log('🎉 Блокирующая загрузка завершена!');
+                }, 500);
             }, 500);
 
         } catch (error) {
@@ -528,10 +533,23 @@
     document.addEventListener('DOMContentLoaded', function () {
         console.log('🔄 Страница загружена, начинаю инициализацию...');
 
+        // Проверяем, было ли ручное обновление
+        const isManualRefresh = sessionStorage.getItem('manualRefresh') === 'true';
+
+        // Очищаем флаг ручного обновления
+        sessionStorage.removeItem('manualRefresh');
+        sessionStorage.removeItem('refreshTimestamp');
+
         // Проверяем наличие интернета
         if (navigator.onLine) {
-            console.log('🌐 Есть интернет - начинаю блокирующую загрузку');
-            performBlockingLoad();
+            if (isManualRefresh) {
+                console.log('🔄 Обнаружено ручное обновление - начинаем полную загрузку');
+                performBlockingLoad();
+            } else {
+                console.log('🌐 Есть интернет - загружаю данные из кеша');
+                // performBlockingLoad(); // Убрали автоматическую загрузку
+                document.getElementById('mainContent').style.opacity = '1';
+            }
         } else {
             console.log('📶 Нет интернета - показываю контент из кеша');
             document.getElementById('mainContent').style.opacity = '1';
@@ -615,6 +633,50 @@
     window.clearImageCache = clearImageCache;
 
     console.log('✅ Глобальные функции изображений зарегистрированы');
+
+    // Обработчик для кнопки обновления
+    document.addEventListener('DOMContentLoaded', function() {
+        const refreshBtn = document.getElementById('refreshBtn');
+
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                // Проверяем наличие интернета
+                if (!navigator.onLine) {
+                    alert('Для обновления данных необходимо подключение к интернету');
+                    return;
+                }
+
+                // Добавляем анимацию вращения
+                const icon = this.querySelector('i');
+                icon.classList.add('fa-spin');
+                this.disabled = true;
+
+                console.log('🔄 Начинаю ручное обновление данных...');
+
+                // Устанавливаем флаг ручного обновления
+                sessionStorage.setItem('manualRefresh', 'true');
+                sessionStorage.setItem('refreshTimestamp', Date.now().toString());
+
+                // Показываем loader перед перезагрузкой
+                const pageLoader = document.getElementById('pageLoader');
+                const mainContent = document.getElementById('mainContent');
+
+                if (pageLoader && mainContent) {
+                    pageLoader.style.display = 'flex';
+                    mainContent.style.opacity = '0';
+
+                    // Активируем первый этап
+                    document.getElementById('livewireStage').classList.add('active');
+                    document.getElementById('livewireStage').querySelector('.stage-text').textContent = 'Перезагрузка страницы для обновления...';
+                }
+
+                // Перезагружаем страницу через короткую задержку, чтобы пользователь увидел анимацию
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            });
+        }
+    });
 
 </script>
 
@@ -715,6 +777,39 @@
 /* Анимация появления контента */
 #mainContent {
     transition: opacity 0.5s ease-in-out;
+}
+
+/* Стили для кнопки обновления */
+#refreshBtn {
+    transition: all 0.3s ease;
+    min-width: 50px;
+}
+
+#refreshBtn:hover {
+    background-color: #007bff;
+    color: white;
+    transform: scale(1.05);
+}
+
+#refreshBtn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+#refreshBtn:disabled:hover {
+    background-color: transparent;
+    color: inherit;
+    transform: none;
+}
+
+/* Анимация вращения для иконки */
+#refreshBtn .fa-spin {
+    animation: fa-spin 1s linear infinite;
+}
+
+@keyframes fa-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Адаптивность для мобильных устройств */

@@ -34,6 +34,10 @@
                            aria-describedby="search-btn" placeholder="категория и ключевое слово..." autofocus>
                     <label for="search" class="sr-only">Search</label>
 
+                    <button type="button" id="refreshBtn" class="btn btn-default ml-0" title="Обновить данные">
+                        <i class="fas fa-sync-alt"></i>
+                    </button>
+
                     <a href="/login" class="btn btn-default btn-r ml-0"><i class="fas fa-sign-in-alt"></i></a>
                 </div>
                 <div wire:loading class="loader">
