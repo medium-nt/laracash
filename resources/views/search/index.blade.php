@@ -572,6 +572,25 @@
             let modal = $(this);
             modal.find('.modal-div').text(note);
         });
+
+        // Блокировка поля поиска в офлайн режиме
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.addEventListener('focus', function() {
+                if (!navigator.onLine) {
+                    this.disabled = true;
+                    this.blur();
+                    alert('Для поиска необходимо подключение к интернету');
+                }
+            });
+
+            // Разблокировка при появлении интернета
+            window.addEventListener('online', function() {
+                if (searchInput) {
+                    searchInput.disabled = false;
+                }
+            });
+        }
     });
 
     // Регистрируем подходящий Service Worker
