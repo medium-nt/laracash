@@ -23,7 +23,7 @@
                     </a>
 
                     <input class="form-control" wire:model.live.debounce.750ms="search" type="text" name="searchInput" id="searchInput"
-                           aria-describedby="search-btn" placeholder="категория и ключевое слово..." autofocus>
+                           aria-describedby="search-btn" placeholder="категория и ключевое слово...">
                     <label for="search" class="sr-only">Search</label>
 
                     <button type="button" id="refreshBtn" class="btn btn-default ml-0" title="Обновить данные">
