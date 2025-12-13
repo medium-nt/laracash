@@ -13,14 +13,6 @@
     <div class="row">
         <div class="col-12">
             <div class="search-form">
-                <!-- Офлайн индикатор -->
-                <div id="offlineIndicator" class="offline-indicator" style="display: none;">
-                    <div class="offline-content">
-                        <i class="fas fa-wifi"></i>
-                        <span>Офлайн режим</span>
-                        <small>Поиск недоступен без интернета</small>
-                    </div>
-                </div>
 
                 <div id="searchInputGroup" class="input-group">
                     <a href="{{ route('search.index', ['token' => $user->search_token]) }}"
@@ -353,7 +345,6 @@
                 this.isOnline = false; // По умолчанию считаем оффлайн
                 this.searchInput = document.getElementById('searchInput');
                 this.searchInputGroup = document.getElementById('searchInputGroup');
-                this.offlineIndicator = document.getElementById('offlineIndicator');
                 this.livewireComponent = null;
 
                 this.init();
@@ -419,23 +410,15 @@
             updateUI() {
                 if (this.isOnline) {
                     // Онлайн режим
-                    if (this.offlineIndicator) {
-                        this.offlineIndicator.style.display = 'none';
-                    }
-                    if (this.searchInputGroup) {
-                        this.searchInputGroup.style.display = 'flex';
-                    }
                     if (this.searchInput) {
                         this.searchInput.disabled = false;
                         this.searchInput.placeholder = 'категория и ключевое слово...';
                     }
                 } else {
                     // Офлайн режим
-                    if (this.offlineIndicator) {
-                        this.offlineIndicator.style.display = 'block';
-                    }
-                    if (this.searchInputGroup) {
-                        this.searchInputGroup.style.display = 'none';
+                    if (this.searchInput) {
+                        this.searchInput.disabled = true;
+                        this.searchInput.placeholder = 'Поиск недоступен без интернета';
                     }
                 }
             }
@@ -469,11 +452,6 @@
                     event.preventDefault();
                     event.target.value = '';
                     event.target.blur();
-
-                    // Показываем оффлайн индикатор если еще не виден
-                    if (this.offlineIndicator) {
-                        this.offlineIndicator.style.display = 'block';
-                    }
 
                     return false;
                 }
@@ -664,69 +642,5 @@
     }
     </style>
 
-<style>
-/* Офлайн индикатор */
-.offline-indicator {
-    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
-    border-radius: 10px;
-    padding: 20px;
-    margin: 30px auto;
-    max-width: 400px;
-    box-shadow: 0 4px 20px rgba(238, 90, 82, 0.3);
-    text-align: center;
-    color: white;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.8; }
-    100% { opacity: 1; }
-}
-
-.offline-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-}
-
-.offline-content i {
-    font-size: 32px;
-    margin-bottom: 5px;
-}
-
-.offline-content span {
-    font-size: 18px;
-    font-weight: 600;
-}
-
-.offline-content small {
-    font-size: 14px;
-    opacity: 0.9;
-    line-height: 1.3;
-}
-
-/* Адаптивность для мобильных */
-@media (max-width: 576px) {
-    .offline-indicator {
-        margin: 20px;
-        padding: 15px;
-        max-width: calc(100% - 40px);
-    }
-
-    .offline-content i {
-        font-size: 24px;
-    }
-
-    .offline-content span {
-        font-size: 16px;
-    }
-
-    .offline-content small {
-        font-size: 12px;
-    }
-}
-</style>
 
 </div>
