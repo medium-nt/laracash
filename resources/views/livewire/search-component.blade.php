@@ -15,16 +15,24 @@
             <div class="search-form">
 
                 <div id="searchInputGroup" class="input-group">
-                    <a href="{{ route('search.index', ['token' => $user->search_token]) }}"
-                       id="back-btn"
-                       class="btn btn-default btn-l mr-0"
-                    >
-                        <i class="fas fa-angle-double-left"></i>
-                    </a>
+{{--                    <a href="{{ route('search.index', ['token' => $user->search_token]) }}"--}}
+{{--                       id="back-btn"--}}
+{{--                       class="btn btn-default btn-l mr-0"--}}
+{{--                    >--}}
+{{--                        <i class="fas fa-angle-double-left"></i>--}}
+{{--                    </a>--}}
 
-                    <input class="form-control" wire:model.live.debounce.750ms="search" type="text" name="searchInput" id="searchInput"
-                           aria-describedby="search-btn" placeholder="категория и ключевое слово...">
-                    <label for="search" class="sr-only">Search</label>
+                    <div class="position-relative flex-grow-1">
+                    <input class="form-control"
+                               wire:model.live.debounce.750ms="search"
+                               type="text" name="searchInput"
+                               id="searchInput"
+                               aria-describedby="search-btn" placeholder="категория и ключевое слово...">
+
+                        @if($search)
+                            <span class="clear-btn" wire:click="$set('search', '')">×</span>
+                        @endif
+                    </div>
 
                     <button type="button" id="refreshBtn" class="btn btn-default ml-0" title="Обновить данные">
                         <i class="fas fa-sync-alt"></i>
@@ -596,50 +604,65 @@
     </script>
 
     <style>
-    .image-loader-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
-        color: white;
-    }
+        .position-relative {
+            position: relative;
+        }
 
-    .image-loader-content {
-        text-align: center;
-        max-width: 300px;
-    }
+        .clear-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            font-size: 20px;
+            color: #888;
+            z-index: 5;
+        }
 
-    .spinner {
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #007bff;
-        border-radius: 50%;
-        width: 50px;
-        height: 50px;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 20px;
-    }
+        .image-loader-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: white;
+        }
 
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
+        .image-loader-content {
+            text-align: center;
+            max-width: 300px;
+        }
 
-    .progress-text {
-        font-size: 18px;
-        font-weight: bold;
-        margin-top: 10px;
-    }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
 
-    .image-loader-overlay p {
-        font-size: 16px;
-        margin: 10px 0;
-    }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .progress-text {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .image-loader-overlay p {
+            font-size: 16px;
+            margin: 10px 0;
+        }
     </style>
 
 
