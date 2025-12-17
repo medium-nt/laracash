@@ -71,13 +71,14 @@ class CashbackController extends Controller
         ]);
     }
 
-    public function cardEdit(Card $card)
+    public function cardEdit(Card $card, Request $request)
     {
         return view('cashback.card_edit', [
             'title' => 'Редактировать кешбек по карте: ' . $card->number . ' (' . $card->bank->title . ')',
             'cashbacks' => CashbackService::getOneCard($card),
             'card' => $card,
             'recognizedCashback' => $card->cashback_json,
+            'fill_recognize' => (bool)$request->get('fill_recognize')
         ]);
     }
 

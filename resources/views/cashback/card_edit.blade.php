@@ -58,15 +58,16 @@
                                     $allHidden = false;
                                 }
 
-                                // ищем распознанное значение для этой категории
-                                $recognizedItem = collect($recognizedCashback)
-                                    ->firstWhere('category', $categoryName);
+                                if ($fill_recognize) {
+                                    // ищем распознанное значение для этой категории
+                                    $recognizedItem = collect($recognizedCashback)
+                                        ->firstWhere('category', $categoryName);
 
-                                if ($recognizedItem) {
-                                    $percent = $recognizedItem['cashback']; // перезаписываем процент
-                                    $display = '';
+                                    if ($recognizedItem) {
+                                        $percent = $recognizedItem['cashback'];
+                                        $display = '';
+                                    }
                                 }
-
                             @endphp
 
                             <div class="category mb-3 row"
@@ -111,6 +112,7 @@
                 </div>
             </div>
         </div>
+
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
@@ -150,6 +152,13 @@
                                 <li>{{ $item['category'] }} — {{ $item['cashback'] }}%</li>
                             @endforeach
                         </ul>
+
+                        @if(!$fill_recognize)
+                        <a href="{{ url()->current() }}?fill_recognize=yes"
+                           class="btn btn-sm btn-primary">
+                            Заполнить распознанными категориями
+                        </a>
+                        @endif
                     @else
                         @if($card->cashback_image)
                             <a href="{{ route('cashback.recognize_cashback', ['card' => $card->id]) }}"
