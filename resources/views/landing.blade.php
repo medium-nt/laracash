@@ -5,8 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Кешбэк по картам</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css"
-          integrity="sha384-rbsA2VBKQhggwzxH7pPCaAqO46MgnOM80zW1RWuH61DGLwZJEdK2Kadq2F9CUG65"
           rel="stylesheet" crossorigin="anonymous">
+    <style>
+        /* Стили для калькулятора */
+        .calculator-card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+        }
+
+        #spending-slider {
+            height: 8px;
+            background: #e9ecef;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        #spending-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #0d6efd;
+            cursor: pointer;
+            border-radius: 50%;
+            margin-top: -6px; /* Центрирование ползунка по высоте */
+        }
+
+        #spending-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: #0d6efd;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+
+    
+        #savings-amount {
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .result-box {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .pulse {
+            animation: pulse 0.3s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* Мобильная адаптация */
+        @media (max-width: 576px) {
+            #spending-slider {
+                height: 12px;
+            }
+
+            #spending-slider::-webkit-slider-thumb {
+                width: 28px;
+                height: 28px;
+                margin-top: -8px; /* Центрирование для мобильной версии */
+            }
+
+            #spending-slider::-moz-range-thumb {
+                width: 28px;
+                height: 28px;
+            }
+
+            #savings-amount {
+                font-size: 1.5rem;
+            }
+
+            .calculator-section h2 {
+                font-size: 1.5rem;
+            }
+
+            .calculator-card {
+                margin: 0 10px;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -55,6 +139,47 @@
                 вашим картам и выбирать карту с максимальным кешбеком при каждой покупке.
             </p>
 
+        </div>
+    </div>
+</section>
+
+<!-- Калькулятор экономии -->
+<section class="calculator-section bg-light py-5">
+    <div class="container">
+        <h2 class="text-center mb-5">Узнайте, сколько вы сэкономите!</h2>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card calculator-card">
+                    <div class="card-body p-4">
+                        <!-- Ползунок -->
+                        <div class="mb-4">
+                            <label class="form-label">Ваши ежемесячные траты по картам:</label>
+                            <input type="range" class="form-range" id="spending-slider"
+                                   min="0" max="500000" step="1000" value="50000">
+                            <div class="d-flex justify-content-between text-muted small">
+                                <span>0 ₽</span>
+                                <span id="current-spending">50 000 ₽</span>
+                                <span>500 000 ₽</span>
+                            </div>
+                        </div>
+
+                        <!-- Результат -->
+                        <div class="result-box text-center py-3">
+                            <p class="mb-2">Ваша экономия в месяц:</p>
+                            <h2 class="text-success" id="savings-amount">1 000 ₽</h2>
+                            <p class="text-muted mb-0">Ваша экономия в год: <span id="yearly-savings">12 000 ₽</span></p>
+                        </div>
+
+                        <!-- Призыв к действию -->
+                        <div class="text-center mt-4">
+                            <a href="{{ route('login') }}" class="btn btn-primary btn-lg">
+                                Начать экономить больше!
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </section>
@@ -139,8 +264,43 @@
     <p>© 2023 Кешбэк по картам. Все права защищены.</p>
 </footer>
 
+<script>
+    // JavaScript для калькулятора экономии
+    document.addEventListener('DOMContentLoaded', function() {
+        const slider = document.getElementById('spending-slider');
+        const currentSpendingEl = document.getElementById('current-spending');
+        const savingsAmountEl = document.getElementById('savings-amount');
+        const yearlySavingsEl = document.getElementById('yearly-savings');
+
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        }
+
+        function updateCalculator() {
+            const spending = parseInt(slider.value);
+            const monthlySavings = Math.round(spending * 0.02);
+            const yearlySavings = monthlySavings * 12;
+
+            currentSpendingEl.textContent = formatNumber(spending) + ' ₽';
+            savingsAmountEl.textContent = formatNumber(monthlySavings) + ' ₽';
+            yearlySavingsEl.textContent = formatNumber(yearlySavings) + ' ₽';
+
+            // Добавляем анимацию к результату
+            savingsAmountEl.classList.add('pulse');
+            setTimeout(() => {
+                savingsAmountEl.classList.remove('pulse');
+            }, 300);
+        }
+
+        // Первоначальное обновление
+        updateCalculator();
+
+        // Обновление при изменении ползунка
+        slider.addEventListener('input', updateCalculator);
+    });
+</script>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+jjXkk+Q2h455rYXKv4g05iyT9lQy"
         crossorigin="anonymous">
 </script>
 </body>
