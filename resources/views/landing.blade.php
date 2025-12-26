@@ -167,10 +167,6 @@
             border-radius: 8px;
         }
 
-        .pulse {
-            animation: pulse 0.3s ease-in-out;
-        }
-
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
@@ -231,10 +227,6 @@
             .btn-cta-hero {
                 padding: 12px 30px;
                 font-size: 1rem;
-            }
-
-            .feature-image {
-                height: 200px;
             }
 
             .feature-image i {
@@ -733,25 +725,6 @@
             transform: translateX(5px);
         }
 
-        /* Стили для кнопки входа */
-        .btn-login {
-            background: linear-gradient(135deg, #198754, #157347);
-            border: none;
-            padding: 10px 25px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .btn-login:hover {
-            background: linear-gradient(135deg, #157347, #125636);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(25, 135, 84, 0.3);
-        }
-
-        .btn-login i {
-            margin-left: 8px;
-        }
-
         /* Стили для секции статистики */
         .stats-section {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -914,7 +887,7 @@
             justify-content: center;
             align-items: center;
             text-align: center;
-            padding: 40px;
+            padding: 50px;
             background: linear-gradient(135deg, #f8f9fa, #e9ecef);
             border-radius: 20px;
             position: relative;
@@ -927,7 +900,7 @@
             top: -50%;
             left: -50%;
             width: 200%;
-            height: 200%;
+            height: 100%;
             background: radial-gradient(circle, rgba(13, 110, 253, 0.05) 0%, transparent 70%);
             animation: float 8s ease-in-out infinite;
         }
@@ -987,31 +960,6 @@
             transform: translateX(5px);
         }
 
-        .feature-image {
-            width: 100%;
-            height: 300px;
-            background: linear-gradient(135deg, #0d6efd, #004085);
-            border-radius: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 3rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .feature-image::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-            animation: float 6s ease-in-out infinite reverse;
-        }
-
         .feature-image i {
             font-size: 4rem;
             z-index: 1;
@@ -1036,56 +984,53 @@
 <section class="description-section">
     <div class="container">
         <div class="row align-items-center">
-        <div class="col-lg-7">
-            <h2 class="mb-4">Что такое кешбэк?</h2>
-            <ul class="feature-list">
-                <li class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-credit-card-2-front"></i>
+            <div class="col-lg-7">
+                <ul class="feature-list">
+                    <li class="feature-item">
+                        <div class="feature-icon">
+                            <i class="bi bi-credit-card-2-front"></i>
+                        </div>
+                        <div class="feature-text">
+                            <h4>Много карт = много условий</h4>
+                            <p>У вас несколько банковских карт, у каждой свои размеры кешбэка и категории. Держать всю эту информацию в голове сложно.</p>
+                        </div>
+                    </li>
+                    <li class="feature-item">
+                        <div class="feature-icon">
+                            <i class="bi bi-clock-history"></i>
+                        </div>
+                        <div class="feature-text">
+                            <h4>Теряете время и деньги</h4>
+                            <p>На кассе пытаетесь вспомнить какая карта выгоднее, а в итоге используете не самую лучшую.</p>
+                        </div>
+                    </li>
+                    <li class="feature-item">
+                        <div class="feature-icon">
+                            <i class="bi bi-clipboard-data"></i>
+                        </div>
+                        <div class="feature-text">
+                            <h4>Удобная система учета</h4>
+                            <p>Мы предлагаем простой инструмент для ведения кешбэка по всем вашим картам в одном месте.</p>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-lg-5">
+                <div class="cta-column">
+                    <div class="cta-content">
+                        @if (Route::has('login'))
+                            <div class="cta-title">Начните экономить уже сегодня!</div>
+                            @auth
+                                <a href="{{ url('/home') }}" class="btn btn-cta-hero btn-lg">
+                                    Войти в кабинет <i class="bi bi-arrow-right-circle"></i>
+                                </a>
+                            @else
+                                <a href="{{ route('login') }}" class="btn btn-cta-hero btn-lg">
+                                    Войти в кабинет <i class="bi bi-arrow-right-circle"></i>
+                                </a>
+                            @endauth
+                        @endif
                     </div>
-                    <div class="feature-text">
-                        <h4>Много карт = много условий</h4>
-                        <p>У вас несколько кредитных карт, у каждой свои условия кешбэка. Держать всю эту информацию в голове сложно.</p>
-                    </div>
-                </li>
-                <li class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-clock-history"></i>
-                    </div>
-                    <div class="feature-text">
-                        <h4>Теряете время и деньги</h4>
-                        <p>На кассе пытаетесь вспомнить какая карта выгоднее, а в итоге используете не самую лучшую.</p>
-                    </div>
-                </li>
-                <li class="feature-item">
-                    <div class="feature-icon">
-                        <i class="bi bi-clipboard-data"></i>
-                    </div>
-                    <div class="feature-text">
-                        <h4>Удобная таблица учета</h4>
-                        <p>Мы предлагаем простой инструмент для ведения таблицы кешбэка по всем вашим картам в одном месте.</p>
-                    </div>
-                </li>
-            </ul>
-        </div>
-        <div class="col-lg-5">
-            <div class="cta-column">
-                <div class="cta-content">
-                    <div class="feature-image mb-4">
-                        <i class="bi bi-credit-card-2-back"></i>
-                    </div>
-                    @if (Route::has('login'))
-                        <div class="cta-title">Начните экономить уже сегодня!</div>
-                        @auth
-                            <a href="{{ url('/home') }}" class="btn btn-cta-hero btn-lg">
-                                Войти в кабинет <i class="bi bi-arrow-right-circle"></i>
-                            </a>
-                        @else
-                            <a href="{{ route('login') }}" class="btn btn-cta-hero btn-lg">
-                                Войти в кабинет <i class="bi bi-arrow-right-circle"></i>
-                            </a>
-                        @endauth
-                    @endif
                 </div>
             </div>
         </div>
@@ -1229,7 +1174,7 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <div>
-                            <h6 class="mb-0">Иван Иванов</h6>
+                            <h6 class="mb-0">Иван</h6>
                             <div class="rating text-warning">
                                 <i class="bi bi-star-fill"></i>
                                 <i class="bi bi-star-fill"></i>
@@ -1251,7 +1196,7 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <div>
-                            <h6 class="mb-0">Марина Петрова</h6>
+                            <h6 class="mb-0">Марина</h6>
                             <div class="rating text-warning">
                                 <i class="bi bi-star-fill"></i>
                                 <i class="bi bi-star-fill"></i>
@@ -1273,7 +1218,7 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <div>
-                            <h6 class="mb-0">Алексей Смирнов</h6>
+                            <h6 class="mb-0">Алексей</h6>
                             <div class="rating text-warning">
                                 <i class="bi bi-star-fill"></i>
                                 <i class="bi bi-star-fill"></i>
@@ -1295,7 +1240,7 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <div>
-                            <h6 class="mb-0">Елена Козлова</h6>
+                            <h6 class="mb-0">Елена</h6>
                             <div class="rating text-warning">
                                 <i class="bi bi-star-fill"></i>
                                 <i class="bi bi-star-fill"></i>
@@ -1305,7 +1250,7 @@
                             </div>
                         </div>
                     </div>
-                    <p class="card-text">"Удобно что добавили загрузку скриншота странцы кешбэка для каждой карты. Всегда можно взглянуть глазами не заходя каждый раз в приложение банка."</p>
+                    <p class="card-text">"Удобно, что для каждой карты хранится скриншот кешбэка — можно быстро посмотреть без захода в приложение банка."</p>
                 </div>
             </div>
         </div>
@@ -1317,7 +1262,7 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <div>
-                            <h6 class="mb-0">Дмитрий Волков</h6>
+                            <h6 class="mb-0">Ольга Н.</h6>
                             <div class="rating text-warning">
                                 <i class="bi bi-star-fill"></i>
                                 <i class="bi bi-star-fill"></i>
@@ -1339,7 +1284,7 @@
                             <i class="bi bi-person-fill fs-4"></i>
                         </div>
                         <div>
-                            <h6 class="mb-0">Ольга Новикова</h6>
+                            <h6 class="mb-0">Дмитрий</h6>
                             <div class="rating text-warning">
                                 <i class="bi bi-star-fill"></i>
                                 <i class="bi bi-star-fill"></i>
@@ -1356,7 +1301,7 @@
     </div>
 </section>
 
-<!-- Контакты -->
+<!-- Контакты
 <section class="container my-5">
     <h2 class="text-center mb-4">Контактная информация</h2>
     <div class="row gx-5 gy-4">
@@ -1377,11 +1322,12 @@
         </div>
     </div>
 </section>
+-->
 
 <!-- Подвал -->
 <footer class="container-fluid p-5 bg-dark text-light text-center position-relative">
     <div class="decorative-shape" style="width: 200px; height: 200px; top: -100px; right: 10%; background: linear-gradient(45deg, rgba(13, 110, 253, 0.1), rgba(255, 255, 255, 0.02));"></div>
-    <p class="position-relative">© 2023 Кешбэк по картам. Все права защищены.</p>
+    <p class="position-relative">© 2025 Все права защищены.</p>
 </footer>
 
 <script>
