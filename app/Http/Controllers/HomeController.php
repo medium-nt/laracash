@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\Bank;
+use App\Models\Card;
+use App\Models\Category;
+use Illuminate\Contracts\Support\Renderable;
 
 class HomeController extends Controller
 {
@@ -19,10 +22,19 @@ class HomeController extends Controller
     /**
      * Show the application dashboard.
      *
-     * @return \Illuminate\Contracts\Support\Renderable
+     * @return Renderable
      */
     public function index()
     {
-        return view('home');
+        $res = Bank::where('user_id', auth()->id())->exists()
+            && Card::where('user_id', auth()->id())->exists()
+            && Category::where('user_id', auth()->id())->exists();
+
+        return view('home',
+            [
+                'is_configured' => $res,
+                'daysUntilMonthEnd' => abs(now()->endOfMonth()->diffInDays(now())),
+                'search_token' => auth()->user()->search_token
+            ]);
     }
 }
