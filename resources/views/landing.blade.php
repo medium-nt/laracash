@@ -1089,7 +1089,7 @@
                         <i class="bi bi-people-fill"></i>
                     </div>
                     <div class="counter">
-                        <div class="stat-number" data-target="117">0</div>
+                        <div class="stat-number" data-target="{{ 100 + $usersCount }}">0</div>
                         <div class="stat-label">Довольных пользователей</div>
                     </div>
                 </div>
@@ -1100,7 +1100,7 @@
                         <i class="bi bi-cash-coin"></i>
                     </div>
                     <div class="counter">
-                        <div class="stat-number" data-target="1755000">0</div>
+                        <div class="stat-number" data-target="{{ 1755000 + $totalSavings }}">0</div>
                         <div class="stat-label">Рублей сэкономлено</div>
                     </div>
                 </div>

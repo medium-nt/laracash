@@ -9,9 +9,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('landing');
-});
+Route::get('/', [App\Http\Controllers\LandingController::class, 'index'])
+    ->name('landing');
 
 Auth::routes();
 
