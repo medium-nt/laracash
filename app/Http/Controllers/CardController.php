@@ -39,7 +39,7 @@ class CardController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'number' => 'required|string|max:255|min:2',
+            'number' => 'nullable|string|max:255|min:2',
             'bank_id' => 'required|exists:banks,id',
             'color' => 'required|string|max:10|min:2',
         ]);
@@ -72,7 +72,7 @@ class CardController extends Controller
     public function update(Request $request, Card $card): RedirectResponse
     {
         $request->validate([
-            'number' => 'required|string|max:255|min:2',
+            'number' => 'nullable|string|max:255|min:2',
             'bank_id' => 'required|exists:banks,id',
             'color' => 'required|string|max:10|min:2',
         ]);

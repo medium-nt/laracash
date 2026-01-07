@@ -27,7 +27,7 @@
                     @method('PUT')
                     <div class="form-group">
                         <label for="number">Номер карты</label>
-                        <input type="text" class="form-control" id="number" name="number" value="{{ $card->number }}" required>
+                        <input type="text" class="form-control" id="number" name="number" value="{{ $card->number }}">
                     </div>
 
                     <div class="form-group">

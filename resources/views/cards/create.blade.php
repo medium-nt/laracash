@@ -26,7 +26,7 @@
                     @csrf
                     <div class="form-group">
                         <label for="number">Название карты или номер</label>
-                        <input type="text" class="form-control" id="number" name="number" value="{{ old('title') }}" required>
+                        <input type="text" class="form-control" id="number" name="number" value="{{ old('title') }}">
                     </div>
 
                     <div class="form-group">
