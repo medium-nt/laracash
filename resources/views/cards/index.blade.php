@@ -23,7 +23,6 @@
                     <table class="table table-hover table-bordered">
                         <thead class="thead-dark">
                             <tr>
-                                <th scope="col">#</th>
                                 <th scope="col">Номер карты</th>
                                 <th scope="col">Название банка</th>
                                 <th scope="col">Цвет</th>
@@ -33,7 +32,6 @@
                         <tbody>
                             @foreach ($cards as $card)
                                 <tr>
-                                    <td>{{ $card->id }}</td>
                                     <td>{{ $card->number }}</td>
                                     <td>{{ $card->bank->title }}</td>
                                     <td><div style="width: 20px; height: 20px; background-color: {{$card->color}};"></div></td>

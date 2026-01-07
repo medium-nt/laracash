@@ -17,7 +17,6 @@
                 <table class="table table-hover table-bordered">
                     <thead class="thead-dark">
                         <tr>
-                            <th scope="col">#</th>
                             <th scope="col">Название банка</th>
                             <th scope="col">Действия</th>
                         </tr>
@@ -25,7 +24,6 @@
                     <tbody>
                         @foreach ($banks as $bank)
                             <tr>
-                                <td>{{ $bank->id }}</td>
                                 <td>{{ $bank->title }}</td>
                                 <td>
                                     <div class="btn-group" role="group">
