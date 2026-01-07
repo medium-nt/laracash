@@ -964,6 +964,32 @@
             font-size: 4rem;
             z-index: 1;
         }
+
+        /* Стили для демо-секции */
+        .demo-section {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 60px 0;
+            border-radius: 20px;
+            overflow: hidden; /* Предотвращаем скролл от декоративных элементов */
+        }
+
+        .demo-section .cta-button {
+            background: linear-gradient(135deg, #0d6efd, #004085);
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 50px;
+            color: white;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .demo-section .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(13, 110, 253, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -1078,7 +1104,7 @@
     </div>
 </section>
 
-<!-- Статистика -->
+<!-- Статистика
 <section class="stats-section">
     <div class="container">
         <h2 class="text-center mb-5">Наши достижения в цифрах</h2>
@@ -1118,7 +1144,7 @@
             </div>
         </div>
     </div>
-</section>
+</section> -->
 
 <!-- Преимущества -->
 <section class="container my-5 position-relative">
@@ -1156,6 +1182,28 @@
                     <h3 class="card-title h4">Быстрое заполнение</h3>
                     <p class="card-text text-muted">ИИ помогает быстро заполнить таблицу кешбэка по скриншоту из банковского приложения</p>
                 </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Демо-секция -->
+<section class="demo-section my-5 position-relative">
+    <div class="decorative-shape" style="width: 150px; height: 150px; top: 50%; left: -75px; background: linear-gradient(45deg, rgba(25, 135, 84, 0.08), rgba(13, 110, 253, 0.04));"></div>
+    <div class="container">
+        <div class="row justify-content-center position-relative">
+            <div class="col-lg-8 text-center">
+                <h2 class="mb-4">Убедитесь сами!</h2>
+                <p class="lead text-muted mb-4">
+                    Посмотрите как работает поиск кешбэка в реальном времени.
+                    Введите любую категорию и узнайте какая карта выгоднее.
+                </p>
+                <a href="/search/{{ $demoUserToken }}" class="btn btn-primary btn-lg cta-button cta-pulse">
+                    <i class="bi bi-play-circle"></i> Открыть демо-версию
+                </a>
+                <p class="text-muted small mt-3">
+                    <i class="bi bi-eye"></i> Без регистрации. Реальные данные.
+                </p>
             </div>
         </div>
     </div>
