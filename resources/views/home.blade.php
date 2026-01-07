@@ -51,6 +51,7 @@
         <div class="row g-4 mb-5">
             <!-- Personal Link -->
             <div class="col-lg-4 col-md-6">
+                @isset($search_token)
                 <a href="{{ route('search.index', ['token' => $search_token]) }}"
                    target="_blank" class="text-decoration-none">
                     <div class="card action-card border-0 shadow-sm">
@@ -70,6 +71,26 @@
                         </div>
                     </div>
                 </a>
+                @else
+                <a href="{{ route('profile') }}" class="text-decoration-none">
+                    <div class="card action-card border-0 shadow-sm">
+                        <div class="card-body p-4">
+                            <div class="d-flex align-items-center justify-content-between gap-3">
+                                <div class="d-flex align-items-center flex-grow-1 gap-3">
+                                    <div class="action-icon bg-info bg-opacity-10 text-info me-5 flex-shrink-0">
+                                        <i class="fas fa-link fa-2x"></i>
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <h5 class="card-title fw-bold mb-1 ml-3">Моя ссылка</h5>
+                                        <p class="card-text text-muted small mb-0 ml-3">Сгенерировать ссылку</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-arrow-right text-info ms-3 flex-shrink-0"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+                @endisset
             </div>
 
             <!-- Cashback Table -->
