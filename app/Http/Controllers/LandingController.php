@@ -14,10 +14,10 @@ class LandingController extends Controller
      */
     public function index()
     {
+        $countUsers = User::all()->count();
+
         return view('landing',
             [
-                $countUsers = User::all()->count(),
-
                 'usersCount' => $countUsers,
                 'totalSavings' => $countUsers * 1500,
                 'demoUserToken' => User::where('email', '1@1.ru')
