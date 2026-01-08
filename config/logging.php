@@ -52,6 +52,13 @@ return [
 
     'channels' => [
 
+        'ai_api' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ai_api.log'),
+            'level' => 'debug',
+            'days' => 30,
+        ],
+
         'stack' => [
             'driver' => 'stack',
             'channels' => explode(',', env('LOG_STACK', 'single')),

@@ -7,6 +7,7 @@ use App\Models\Category;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class AiService
@@ -40,10 +41,17 @@ class AiService
             return '';
         }
 
+        $fileSize = filesize($path);
+        Log::channel('ai_api')->info("Загрузка файла", [
+            'card_id' => $card->id,
+            'size' => $fileSize . ' bytes'
+        ]);
+
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . self::getToken(),
         ])->withOptions([
             'verify' => false,
+            'timeout' => 90,
         ])->attach(
             'file',
             file_get_contents($path),
@@ -52,7 +60,14 @@ class AiService
             'purpose' => 'general',
         ]);
 
-        return $response->json('id');
+        if (!$response->successful()) {
+            Log::channel('ai_api')->error('Ошибка загрузки файла', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+        }
+
+        return $response->json('id', '');
     }
 
     private static function recognizeGigaChat(Card $card): bool
@@ -106,16 +121,22 @@ class AiService
                             'profanity_check' => true,
                         ]);
                     } else {
+                        Log::channel('ai_api')
+                            ->error('Не удалось обновить токен. Ошибка клиента: ' . $response->body());
                         return false;
                     }
                 } else {
                     // Другие 4xx ошибки
+                    Log::channel('ai_api')
+                        ->error('Не удалось распознать кешбек. Ошибка клиента: ' . $response->body());
                     return false;
                 }
             }
 
             if ($response->serverError()) {
                 // 5xx
+                Log::channel('ai_api')
+                    ->error('Не удалось распознать кешбек. Ошибка сервера: ' . $response->body());
                 return false;
             }
 
@@ -128,6 +149,8 @@ class AiService
 
             return true;
         } catch (Exception $e) {
+            Log::channel('ai_api')
+                ->error('Не удалось распознать кешбек. Ошибка: ' . $e->getMessage());
             return false;
         }
     }
