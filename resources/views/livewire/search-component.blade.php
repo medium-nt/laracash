@@ -126,7 +126,6 @@
                 </div>
                 <!-- Тело модалки -->
                 <div class="modal-body text-center">
-                    <div id="modalCardId" style="margin-bottom: 10px; font-weight: bold;"></div>
                     <img id="modalImage" src="" alt="Скриншот кешбэка" style="max-width: 100%; height: auto;">
                 </div>
             </div>
@@ -547,7 +546,6 @@
             if (src === '') {
                 modal.find('#modalImage').attr('alt', 'Скриншот карты не найден');
                 modal.find('#modalImage').attr('src', '');
-                modal.find('#modalCardId').text('ID карты: ' + cardId);
                 modal.modal('show');
                 return;
             }
@@ -558,7 +556,6 @@
 
             if (cachedImage) {
                 // ✅ Изображение есть в localStorage - показываем сразу
-                modal.find('#modalCardId').text('ID карты: ' + cardId);
                 modal.find('#modalImage').attr('src', cachedImage);
                 modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
                 modal.modal('show');
@@ -570,13 +567,11 @@
                 if (directCache) {
                     modal.find('#modalImage').attr('src', directCache);
                     modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-                    modal.find('#modalCardId').text('ID карты: ' + cardId);
                     modal.modal('show');
                 } else if (navigator.onLine) {
                     // Только при интернете пробуем загрузить
                     modal.find('#modalImage').attr('src', 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMjUiIGN5PSIyNSIgcj0iMjAiIHN0cm9rZT0iIzAwN2JmZiIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjEwIDEwIj4KPGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ic3Ryb2tlLWRhc2hvZmZzZXQiIHZhbHVlcz0iMTAwIDA7MTAwIDA7MTAwIDA7MDtDMCAxMDAiIGR1cj0iMXMiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+CjwvY2lyY2xlPgo8L3N2Zz4=');
                     modal.find('#modalImage').attr('alt', 'Загрузка...');
-                    modal.find('#modalCardId').text('ID карты: ' + cardId + ' (загрузка...)');
                     modal.modal('show');
 
                     // Загружаем изображение (используем глобальную функцию)
@@ -584,19 +579,16 @@
                         .then(function(base64Image) {
                             modal.find('#modalImage').attr('src', base64Image);
                             modal.find('#modalImage').attr('alt', 'Скриншот кешбэка');
-                            modal.find('#modalCardId').text('ID карты: ' + cardId);
                         })
                         .catch(function(error) {
                             console.error('❌ Ошибка загрузки изображения:', src, error);
                             modal.find('#modalImage').attr('src', '');
                             modal.find('#modalImage').attr('alt', 'Ошибка загрузки скриншота');
-                            modal.find('#modalCardId').text('ID карты: ' + cardId + ' (ошибка)');
                         });
                 } else {
                     // Нет интернета и нет кеша
                     modal.find('#modalImage').attr('alt', 'Скриншот не найден (оффлайн)');
                     modal.find('#modalImage').attr('src', '');
-                    modal.find('#modalCardId').text('ID карты: ' + cardId + ' (оффлайн)');
                     modal.modal('show');
                 }
             }
