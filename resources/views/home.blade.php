@@ -389,4 +389,20 @@
         }
     </style>
     @endif
+
+    <!-- Feedback -->
+    <div class="card border-0 shadow-lg mb-4 overflow-hidden">
+        <div class="card-body p-0">
+            <div class="row g-0">
+                <div class="col-12 p-3 text-center">
+                    <p class="lead text-muted mb-0">
+                        Если у вас есть вопросы или предложения, вы можете написать на прямую разработчику в ТГ
+                        <a href="https://t.me/MediumNT" target="_blank">
+                            @MediumNT
+                        </a>.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
 @stop

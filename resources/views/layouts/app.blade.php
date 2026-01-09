@@ -33,13 +33,14 @@
 {{-- Create a common footer --}}
 
 @section('footer')
-    <div class="float-right">
-        Version: {{ config('app.version', '1.0.1') }}
-    </div>
+{{--    <div class="float-right">--}}
+{{--        Version: {{ config('app.version', '1.0.1') }}--}}
+{{--    </div>--}}
 
     <strong>
-        <a href="{{ config('app.company_url', '#') }}">
-            {{ config('app.company_name', 'y-cashback') }}
+        Написать админу:
+        <a href="https://t.me/MediumNT" target="_blank">
+            @MediumNT
         </a>
     </strong>
 @stop
