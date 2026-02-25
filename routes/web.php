@@ -25,7 +25,7 @@ Route::get('/search/{token}/manifest', [App\Http\Controllers\SearchController::c
 Route::get('/api/search-data/{token}', [App\Http\Controllers\SearchDataController::class, 'getFreshData'])
     ->name('search.data.fresh');
 
-Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
+//Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
 Route::get('/tg-app', function () {
     return view('tg-app');
