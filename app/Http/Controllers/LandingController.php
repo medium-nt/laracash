@@ -22,7 +22,7 @@ class LandingController extends Controller
                 'totalSavings' => $countUsers * 1500,
                 'demoUserToken' => User::where('email', '1@1.ru')
                     ->first()
-                    ->search_token
+                    ?->search_token,
             ]);
     }
 }

@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'gigachat' => [
+        'auth_key' => env('GIGACHAT_AUTH_KEY'),
+    ],
+
 ];

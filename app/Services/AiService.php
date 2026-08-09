@@ -12,11 +12,31 @@ use Illuminate\Support\Str;
 
 class AiService
 {
+    /**
+     * Минимальный процент сходства строк (similar_text), при котором
+     * распознанная категория считается совпавшей с категорией пользователя.
+     */
+    private const SIMILARITY_THRESHOLD = 70;
+
+    /**
+     * Минимальная длина строки (в символах) для шага сопоставления по вхождению
+     * подстроки. Короткие строки («и», «АЗС») через подстроку не сравниваются —
+     * иначе они матчат почти любую категорию.
+     */
+    private const MIN_SUBSTRING_LENGTH = 4;
+
     private static function getPrompt(): string
     {
         $categories = Category::query()
             ->where('user_id', auth()->user()->id)
-            ->pluck('title')
+            ->get(['title', 'keywords'])
+            ->map(function (Category $category) {
+                $keywords = trim((string) $category->keywords);
+
+                return $keywords !== ''
+                    ? "«{$category->title}» (синонимы: {$keywords})"
+                    : "«{$category->title}»";
+            })
             ->implode(', ');
 
         return "На картинке скриншот категорий кешбека и их размера в процентах.
@@ -35,35 +55,46 @@ class AiService
 
     public static function downloadFile(Card $card): string
     {
-        $path = storage_path('app/public/card_cashback_image/' . $card->id . '.jpg');
+        if (empty($card->cashback_image)) {
+            Log::channel('ai_api')->error('Путь к скриншоту кешбека пуст', ['card_id' => $card->id]);
 
-        if (!file_exists($path)) {
+            return '';
+        }
+
+        $path = storage_path('app/public/card_cashback_image/'.$card->cashback_image);
+
+        if (! file_exists($path)) {
+            Log::channel('ai_api')->error('Файл скриншота кешбека не найден', [
+                'card_id' => $card->id,
+                'path' => $path,
+            ]);
+
             return '';
         }
 
         $fileSize = filesize($path);
-        Log::channel('ai_api')->info("Загрузка файла", [
+        Log::channel('ai_api')->info('Загрузка файла', [
             'card_id' => $card->id,
-            'size' => $fileSize . ' bytes'
+            'size' => $fileSize.' bytes',
         ]);
 
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . self::getToken(),
+            'Authorization' => 'Bearer '.self::getToken(),
         ])->withOptions([
             'verify' => false,
             'timeout' => 90,
         ])->attach(
             'file',
             file_get_contents($path),
-            '1.jpg'
+            $card->cashback_image
         )->post('https://gigachat.devices.sberbank.ru/api/v1/files', [
             'purpose' => 'general',
         ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::channel('ai_api')->error('Ошибка загрузки файла', [
                 'status' => $response->status(),
-                'body' => $response->body()
+                'body' => $response->body(),
             ]);
         }
 
@@ -76,7 +107,7 @@ class AiService
             $response = Http::withHeaders([
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . self::getToken(),
+                'Authorization' => 'Bearer '.self::getToken(),
             ])->withOptions([
                 'verify' => false,
             ])->post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', [
@@ -85,10 +116,10 @@ class AiService
                     [
                         'role' => 'user',
                         'content' => self::getPrompt(),
-                        "attachments" => [
+                        'attachments' => [
                             self::downloadFile($card),
-                        ]
-                    ]
+                        ],
+                    ],
                 ],
                 'stream' => false,
                 'profanity_check' => true,
@@ -103,7 +134,7 @@ class AiService
                         $response = Http::withHeaders([
                             'Content-Type' => 'application/json',
                             'Accept' => 'application/json',
-                            'Authorization' => 'Bearer ' . $newToken,
+                            'Authorization' => 'Bearer '.$newToken,
                         ])->withOptions([
                             'verify' => false,
                         ])->post('https://gigachat.devices.sberbank.ru/api/v1/chat/completions', [
@@ -112,23 +143,25 @@ class AiService
                                 [
                                     'role' => 'user',
                                     'content' => self::getPrompt(),
-                                    "attachments" => [
+                                    'attachments' => [
                                         self::downloadFile($card),
-                                    ]
-                                ]
+                                    ],
+                                ],
                             ],
                             'stream' => false,
                             'profanity_check' => true,
                         ]);
                     } else {
                         Log::channel('ai_api')
-                            ->error('Не удалось обновить токен. Ошибка клиента: ' . $response->body());
+                            ->error('Не удалось обновить токен. Ошибка клиента: '.$response->body());
+
                         return false;
                     }
                 } else {
                     // Другие 4xx ошибки
                     Log::channel('ai_api')
-                        ->error('Не удалось распознать кешбек. Ошибка клиента: ' . $response->body());
+                        ->error('Не удалось распознать кешбек. Ошибка клиента: '.$response->body());
+
                     return false;
                 }
             }
@@ -136,7 +169,8 @@ class AiService
             if ($response->serverError()) {
                 // 5xx
                 Log::channel('ai_api')
-                    ->error('Не удалось распознать кешбек. Ошибка сервера: ' . $response->body());
+                    ->error('Не удалось распознать кешбек. Ошибка сервера: '.$response->body());
+
                 return false;
             }
 
@@ -144,15 +178,155 @@ class AiService
 
             $decoded = json_decode($result['choices'][0]['message']['content'], true);
 
+            if (! is_array($decoded) || empty($decoded)) {
+                Log::channel('ai_api')->error('Не удалось распознать кешбек. Пустой или невалидный ответ модели.', [
+                    'card_id' => $card->id,
+                    'content' => $result['choices'][0]['message']['content'] ?? null,
+                ]);
+
+                return false;
+            }
+
+            $decoded = self::mapToUserCategories($decoded, auth()->user()->id);
+
             $card->cashback_json = $decoded;
             $card->save();
 
             return true;
         } catch (Exception $e) {
             Log::channel('ai_api')
-                ->error('Не удалось распознать кешбек. Ошибка: ' . $e->getMessage());
+                ->error('Не удалось распознать кешбек. Ошибка: '.$e->getMessage());
+
             return false;
         }
+    }
+
+    /**
+     * Сопоставляет распознанные GigaChat категории с категориями пользователя:
+     * точное совпадение по title -> по синонимам (keywords) -> вхождение подстроки
+     * -> сходство строк не ниже порога. Несопоставленные строки возвращаются как есть.
+     *
+     * @param  array  $recognized  Ответ GigaChat: [{category, cashback}, ...].
+     * @param  int  $userId  ID владельца категорий.
+     * @return array Тот же массив, где совпавшие category заменены на каноничные title.
+     */
+    private static function mapToUserCategories(array $recognized, int $userId): array
+    {
+        $categories = Category::query()
+            ->where('user_id', $userId)
+            ->orderBy('title')
+            ->get(['title', 'keywords']);
+
+        foreach ($recognized as &$item) {
+            if (! is_array($item) || ! isset($item['category'])) {
+                continue;
+            }
+
+            $matched = self::matchCategory((string) $item['category'], $categories);
+
+            if ($matched !== null) {
+                $item['category'] = $matched;
+            }
+        }
+        unset($item);
+
+        return $recognized;
+    }
+
+    /**
+     * Ищет каноничный title категории пользователя для распознанной строки.
+     *
+     * @param  string  $recognized  Распознанная GigaChat строка категории.
+     * @param  \Illuminate\Support\Collection  $categories  Категории пользователя.
+     * @return string|null Каноничный title либо null при отсутствии совпадения.
+     */
+    private static function matchCategory(string $recognized, $categories): ?string
+    {
+        $needle = self::normalize($recognized);
+
+        if ($needle === '') {
+            return null;
+        }
+
+        // 1-2. Точное совпадение по названию и по синонимам — самый надёжный вариант.
+        foreach ($categories as $category) {
+            $title = self::normalize((string) $category->title);
+
+            if ($title === $needle) {
+                return $category->title;
+            }
+
+            foreach (self::keywordsTokens($category->keywords) as $token) {
+                if ($token === $needle) {
+                    return $category->title;
+                }
+            }
+        }
+
+        // 3. Вхождение подстроки — отдельным проходом по убыванию длины названия,
+        //    чтобы самое специфичное имя побеждало. Короткие строки пропускаем,
+        //    иначе «и» или «АЗС» будут матчить почти любую категорию.
+        $byTitleLengthDesc = $categories->sortByDesc(fn ($c) => mb_strlen(self::normalize((string) $c->title)));
+
+        foreach ($byTitleLengthDesc as $category) {
+            $title = self::normalize((string) $category->title);
+
+            if (mb_strlen($title) < self::MIN_SUBSTRING_LENGTH || mb_strlen($needle) < self::MIN_SUBSTRING_LENGTH) {
+                continue;
+            }
+
+            if (str_contains($needle, $title) || str_contains($title, $needle)) {
+                return $category->title;
+            }
+        }
+
+        // 4. Наибольшее сходство строк среди всех категорий, если выше порога.
+        $bestTitle = null;
+        $bestPercent = 0.0;
+
+        foreach ($categories as $category) {
+            $title = self::normalize((string) $category->title);
+            if ($title === '') {
+                continue;
+            }
+
+            similar_text($needle, $title, $percent);
+
+            if ($percent > $bestPercent) {
+                $bestPercent = $percent;
+                $bestTitle = $category->title;
+            }
+        }
+
+        return $bestPercent >= self::SIMILARITY_THRESHOLD ? $bestTitle : null;
+    }
+
+    /**
+     * Нормализует строку для сравнения: нижний регистр + обрезка пробелов.
+     *
+     * @param  string  $value  Исходная строка.
+     * @return string Нормализованная строка.
+     */
+    private static function normalize(string $value): string
+    {
+        return trim(mb_strtolower($value));
+    }
+
+    /**
+     * Разбивает поле keywords на нормализованные токены-синонимы.
+     *
+     * @param  string|null  $keywords  Поле keywords категории.
+     * @return string[] Массив нормализованных синонимов.
+     */
+    private static function keywordsTokens(?string $keywords): array
+    {
+        if ($keywords === null || trim($keywords) === '') {
+            return [];
+        }
+
+        $tokens = preg_split('/\s+/u', trim($keywords)) ?: [];
+
+        return array_map(fn (string $token) => self::normalize($token), $tokens);
     }
 
     private static function getToken(): string
@@ -162,13 +336,13 @@ class AiService
                 'Content-Type' => 'application/x-www-form-urlencoded',
                 'Accept' => 'application/json',
                 'RqUID' => (string) Str::uuid(),
-                'Authorization' => 'Basic MDE5OTk2NDYtYmI2ZC03Mjc5LWE1ZGItYTBjMDYxMTdiMDA3Ojk2MDU0N2ZkLTZlOWEtNDA3Ni1hYWEyLThkMDUyMmE2NTY0Zg==',
+                'Authorization' => 'Basic '.config('services.gigachat.auth_key'),
             ])->withOptions([
-                    'verify' => false,
-                ])
+                'verify' => false,
+            ])
                 ->asForm()->post('https://ngw.devices.sberbank.ru:9443/api/v2/oauth', [
-                'scope' => 'GIGACHAT_API_PERS',
-            ]);
+                    'scope' => 'GIGACHAT_API_PERS',
+                ]);
 
             if (empty($response->json('access_token'))) {
                 return '';
@@ -181,6 +355,7 @@ class AiService
     private static function refreshToken(): string
     {
         Cache::forget('gigachat_token');
+
         return self::getToken();
     }
 
