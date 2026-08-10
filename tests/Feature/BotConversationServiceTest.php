@@ -1,0 +1,841 @@
+<?php
+
+use App\Models\Bank;
+use App\Models\Card;
+use App\Models\Role;
+use App\Models\User;
+use App\Services\Bot\BotConversationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+
+uses(RefreshDatabase::class);
+
+// Создаём роль для всех тестов
+beforeEach(function () {
+    Role::firstOrCreate(['name' => 'client']);
+    Role::firstOrCreate(['name' => 'admin']);
+    Http::fake([
+        '*api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]]),
+    ]);
+    config()->set('tg.token', 'TEST');
+});
+
+test('/start от привязанного юзера устанавливает состояние idle', function () {
+    User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+
+    app(BotConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start'],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->toBe('idle');
+});
+
+test('/start от НЕ привязанного юзера не устанавливает состояние', function () {
+    app(BotConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 999], 'text' => '/start'],
+    ]);
+
+    // Состояние НЕ должно устанавливаться для несуществующего юзера
+    $state = Cache::get('bot.state.999');
+    expect($state)->toBeNull();
+});
+
+test('/menu работает так же как /start', function () {
+    User::factory()->create(['telegram_id' => '42', 'name' => 'Тест']);
+
+    app(BotConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/menu'],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('idle');
+});
+
+test('callback cmd:update без карт устанавливает состояние idle', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb123',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cmd:update',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->toBe('idle');
+});
+
+test('callback cmd:update с картами устанавливает состояние await_card', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Сбербанк']);
+    Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '1234',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb123',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cmd:update',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->toBe('await_card');
+});
+
+test('callback с выбором карты переводит в состояние await_photo', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Тинькофф']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '5678',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb456',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'card:'.$card->id,
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->toBe('await_photo')
+        ->and($state['card_id'])->toBe($card->id);
+});
+
+test('callback merge (и алиас save) применяет кешбэк из items', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Альфа']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '9999',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    // Устанавливаем состояние await_confirm с items
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'raw' => [], // raw больше не используется для apply
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Супермаркеты', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    // Тестируем новый callback 'merge'
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb789',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'merge',
+        ],
+    ]);
+
+    $card->refresh();
+    expect($card->cashback_json)->not->toBeNull()
+        ->and($card->cashback_json)->toBeArray()
+        ->and($card->cashback_json[0]['category'])->toBe('Аптеки')
+        ->and((float) $card->cashback_json[0]['cashback'])->toBe(5.0);
+
+    // Также проверяем алиас 'save' для обратной совместимости
+    $card->update(['cashback_json' => null]);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Кафе', 'percent' => 7.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb790',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'save',
+        ],
+    ]);
+
+    $card->refresh();
+    expect($card->cashback_json[0]['category'])->toBe('Кафе')
+        ->and($card->cashback_json[0]['cashback'])->toBe(7);
+});
+
+test('callback cancel отменяет применение', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb000',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cancel',
+        ],
+    ]);
+
+    // После отмены состояние должно вернуться в idle
+    $state = Cache::get('bot.state.42');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->toBe('idle');
+});
+
+test('клавиатура карт пуста если у юзера нет карт', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb111',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cmd:update',
+        ],
+    ]);
+
+    // Проверяем что состояние вернулось в idle после сообщения об отсутствии карт
+    $state = Cache::get('bot.state.42');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->toBe('idle');
+});
+
+test('callback card с чужим card_id шлёт "Карта не найдена" и не меняет state', function () {
+    // Arrange: создаем User A (с telegram_id='1')
+    $userA = User::factory()->create(['telegram_id' => '1']);
+    $bankA = Bank::create(['user_id' => $userA->id, 'title' => 'Сбербанк']);
+    $cardA = Card::create([
+        'user_id' => $userA->id,
+        'bank_id' => $bankA->id,
+        'number' => '1111',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    // Создаем User B с другой картой Card B
+    $userB = User::factory()->create(['telegram_id' => '2']);
+    $bankB = Bank::create(['user_id' => $userB->id, 'title' => 'Тинькофф']);
+    $cardB = Card::create([
+        'user_id' => $userB->id,
+        'bank_id' => $bankB->id,
+        'number' => '2222',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    // Устанавливаем начальное состояние User A в idle
+    Cache::put('bot.state.1', ['name' => 'idle'], now()->addSeconds(1800));
+
+    // Act: callback от User A с card_id принадлежащим User B
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb999',
+            'from' => ['id' => 1],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'card:'.$cardB->id, // card_id от User B
+        ],
+    ]);
+
+    // Assert: проверяем что отправлено сообщение с текстом "Карта не найдена"
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($request->data()['text'] ?? '', 'Карта не найдена');
+    });
+
+    // Assert: состояние User A НЕ изменилось на await_photo
+    $state = Cache::get('bot.state.1');
+    expect($state)->not->toBeNull()
+        ->and($state['name'])->not->toBe('await_photo')
+        ->and($state['name'])->toBe('idle'); // состояние должно остаться idle
+});
+
+test('parseItem парсит название с пробелами и процент', function () {
+    expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5'))->toBe([
+        'title' => 'Аптеки',
+        'percent' => 5.0,
+    ]);
+
+    expect(App\Services\Bot\BotConversationService::parseItem('Кафе и рестораны 3.5'))->toBe([
+        'title' => 'Кафе и рестораны',
+        'percent' => 3.5,
+    ]);
+
+    expect(App\Services\Bot\BotConversationService::parseItem('Кино'))->toBeNull();
+
+    expect(App\Services\Bot\BotConversationService::parseItem(''))->toBeNull();
+});
+
+test('callback del удаляет пункт', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+            ['title' => 'Кино', 'percent' => 10.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_del',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'del:1',
+        ],
+    ]);
+
+    // Проверяем, что элемент удалён
+    $state = Cache::get('bot.state.42');
+    expect($state['items'])->toHaveCount(2)
+        ->and($state['items'][0]['title'])->toBe('Аптеки')
+        ->and($state['items'][1]['title'])->toBe('Кино');
+
+    // Проверяем, что editMessageText был вызван
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), 'editMessageText');
+    });
+});
+
+test('callback edit переводит в await_edit', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_edit',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edit:0',
+        ],
+    ]);
+
+    // Проверяем, что состояние изменилось на await_edit
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit')
+        ->and($state['index'])->toBe(0);
+});
+
+test('сообщение в состоянии await_edit обновляет элемент', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Устанавливаем состояние await_edit с данными из await_confirm
+    Cache::put('bot.state.42', [
+        'name' => 'await_edit',
+        'index' => 0,
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    // Отправляем сообщение с новым названием и процентом
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'Супермаркеты 7',
+        ],
+    ]);
+
+    // Проверяем, что элемент обновлён
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['items'][0]['title'])->toBe('Супермаркеты')
+        ->and($state['items'][0]['percent'])->toBe(7.0);
+});
+
+test('сообщение в состоянии await_add добавляет элемент', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_add',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'Кафе и рестораны 3.5',
+        ],
+    ]);
+
+    // Проверяем, что элемент добавлен
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['items'])->toHaveCount(2)
+        ->and($state['items'][1]['title'])->toBe('Кафе и рестораны')
+        ->and($state['items'][1]['percent'])->toBe(3.5);
+});
+
+test('сообщение с неверным форматом возвращает ошибку', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_edit',
+        'index' => 0,
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'неправильный формат',
+        ],
+    ]);
+
+    // Проверяем, что отправлено сообщение об ошибке
+    Http::assertSent(function ($request) {
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($request->data()['text'] ?? '', 'Не понял формат');
+    });
+
+    // Состояние должно остаться await_edit
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit');
+});
+
+test('callback replace удаляет старые категории и записывает новые', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Сбербанк']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '1111',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    // Создаём категорию
+    $category = \App\Models\Category::create([
+        'user_id' => $user->id,
+        'title' => 'Аптеки',
+        'keywords' => 'аптека,лекарства,фармация',
+        'icon' => '',
+        'color' => '#000000',
+    ]);
+
+    // Создаём существующую запись Cashback для карты
+    \App\Models\Cashback::create([
+        'card_id' => $card->id,
+        'category_id' => $category->id,
+        'cashback_percentage' => 3.0,
+        'mcc' => '',
+    ]);
+
+    // Устанавливаем состояние await_confirm с НОВОЙ категорией и тем же title
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0], // Та же категория, другой процент
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    // Вызываем callback replace
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_replace',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'replace',
+        ],
+    ]);
+
+    // Проверяем, что СТАРАЯ запись удалена (запись с 3.0%)
+    expect(\App\Models\Cashback::where('card_id', $card->id)
+        ->where('category_id', $category->id)
+        ->where('cashback_percentage', 3.0)
+        ->count())->toBe(0);
+
+    // Проверяем, что применяется НОВАЯ запись из items
+    $card->refresh();
+    expect($card->cashback_json)->not->toBeNull()
+        ->and($card->cashback_json)->toBeArray()
+        ->and($card->cashback_json[0]['category'])->toBe('Аптеки')
+        ->and((float) $card->cashback_json[0]['cashback'])->toBe(5.0);
+});
+
+test('callback merge НЕ удаляет старые категории', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Тинькофф']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '2222',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    // Создаём категорию
+    $category1 = \App\Models\Category::create([
+        'user_id' => $user->id,
+        'title' => 'Кафе',
+        'keywords' => 'кафе,ресторан,еда',
+        'icon' => '',
+        'color' => '#000000',
+    ]);
+
+    $category2 = \App\Models\Category::create([
+        'user_id' => $user->id,
+        'title' => 'Аптеки',
+        'keywords' => 'аптека,лекарства',
+        'icon' => '',
+        'color' => '#000000',
+    ]);
+
+    // Создаём существующую запись Cashback (старая категория)
+    \App\Models\Cashback::create([
+        'card_id' => $card->id,
+        'category_id' => $category1->id,
+        'cashback_percentage' => 3.0,
+        'mcc' => '',
+    ]);
+
+    // Устанавливаем состояние await_confirm с НОВОЙ категорией
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0], // Новая категория
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    // Вызываем callback merge
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_merge',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'merge',
+        ],
+    ]);
+
+    // Проверяем, что СТАРАЯ запись ОСТАЛАСЬ (merge не удаляет)
+    $oldCashback = \App\Models\Cashback::where('card_id', $card->id)
+        ->where('category_id', $category1->id)
+        ->first();
+
+    expect($oldCashback)->not->toBeNull()
+        ->and($oldCashback->cashback_percentage)->toBe(3.0);
+
+    // Проверяем, что НОВАЯ запись добавлена
+    $card->refresh();
+    expect($card->cashback_json)->not->toBeNull()
+        ->and($card->cashback_json)->toBeArray()
+        ->and($card->cashback_json[0]['category'])->toBe('Аптеки')
+        ->and((float) $card->cashback_json[0]['cashback'])->toBe(5.0);
+});
+
+test('buildEditorKeyboard использует понятный нейминг без дубля «Добавить»', function () {
+    $service = app(BotConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Аптеки', 'percent' => 5.0],
+        ['title' => 'Кафе', 'percent' => 3.0],
+    ]);
+
+    // Кнопки сохранения — каждая на всю ширину своей строки
+    $buttons = collect($kb)->flatten(1)->keyBy('callback_data');
+
+    expect($buttons->has('add'))->toBeTrue()
+        ->and($buttons->has('merge'))->toBeTrue()
+        ->and($buttons->has('replace'))->toBeTrue()
+        ->and($buttons->has('cancel'))->toBeTrue()
+        ->and($buttons->get('add')['text'])->toBe('➕ Добавить категорию')
+        ->and($buttons->get('merge')['text'])->toBe('💾 Сохранить (добавить к старым)')
+        ->and($buttons->get('replace')['text'])->toBe('♻️ Заменить (удалить старые)');
+});
+
+test('buildEditorKeyboard: «Добавить категорию» идёт первой строкой', function () {
+    $service = app(BotConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => 1],
+        ['title' => 'Кафе', 'percent' => 3.0, 'category_id' => 2],
+    ]);
+
+    // Первая строка клавиатуры — кнопка «Добавить категорию»
+    expect($kb[0][0]['callback_data'] ?? null)->toBe('add');
+});
+
+test('обработка ввода в await_edit удаляет сообщение пользователя и transient-промпт (cleanup)', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_edit',
+        'index' => 0,
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+        'last_bot_msg' => 7,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'message_id' => 99,
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'Кафе 3',
+        ],
+    ]);
+
+    // Сообщение пользователя (99) и transient-промпт (7) удалены
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/deleteMessage')
+        && (int) ($r->data()['message_id'] ?? 0) === 99);
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/deleteMessage')
+        && (int) ($r->data()['message_id'] ?? 0) === 7);
+
+    // Редактор обновлён in-place
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'editMessageText'));
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['items'][0]['title'])->toBe('Кафе')
+        ->and($state['last_bot_msg'])->toBeNull();
+});
+
+test('повторный transient удаляет предыдущее сообщение бота — меню не копится', function () {
+    User::factory()->create(['telegram_id' => '42', 'name' => 'Тест']);
+    $svc = app(BotConversationService::class);
+
+    // /start → меню (last_bot_msg запомнен в state)
+    $svc->handle(['message' => ['message_id' => 501, 'chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start']]);
+    // /menu → новый transient должен удалить предыдущее сообщение бота (msg_id=1 из fake)
+    $svc->handle(['message' => ['message_id' => 502, 'chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/menu']]);
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/deleteMessage')
+        && (int) ($r->data()['message_id'] ?? 0) === 1);
+});
+
+test('текстовое сообщение пользователя удаляется (команды/ввод чистятся)', function () {
+    User::factory()->create(['telegram_id' => '42', 'name' => 'Тест']);
+
+    app(BotConversationService::class)->handle([
+        'message' => ['message_id' => 333, 'chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/menu'],
+    ]);
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/deleteMessage')
+        && (int) ($r->data()['message_id'] ?? 0) === 333);
+});
+
+test('при сохранении кешбэка удаляется скрин (photo_msg_id)', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Альфа']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '9999',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+        'photo_msg_id' => 777,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb1',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'merge',
+        ],
+    ]);
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/deleteMessage')
+        && (int) ($r->data()['message_id'] ?? 0) === 777);
+});
+
+test('buildEditorText помечает существующие ✅ и новые 🆕', function () {
+    $service = app(BotConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorText');
+    $text = $method->invoke($service, [
+        ['title' => 'Супермаркеты', 'percent' => 5.0, 'category_id' => 1],
+        ['title' => 'Доставка еды', 'percent' => 7.0, 'category_id' => null],
+    ]);
+
+    expect($text)->toContain('✅ Супермаркеты — 5%')
+        ->and($text)->toContain('🆕 Доставка еды — 7%');
+});
+
+test('callback merge создаёт недостающую категорию из items и сообщает о ней', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Альфа']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '9999',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Доставка еды', 'percent' => 7.0, 'category_id' => null], // 🆕
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'merge',
+        ],
+    ]);
+
+    // Категория создана
+    expect(\App\Models\Category::query()->where('user_id', $user->id)->where('title', 'Доставка еды')->exists())->toBeTrue();
+
+    // Сообщение упоминает новую категорию
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', '1 нов.: Доставка еды'));
+});
+
+test('buildEditorText экранирует спецсимволы в названии (защита HTML-парсинга)', function () {
+    $service = app(BotConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorText');
+    $text = $method->invoke($service, [
+        ['title' => 'Кафе & Рестораны <b>x</b>', 'percent' => 5.0, 'category_id' => 1],
+    ]);
+
+    expect($text)->toContain('Кафе &amp; Рестораны &lt;b&gt;x&lt;/b&gt;')
+        ->and($text)->not->toContain('<b>');
+});
+
+test('фото вне состояния await_photo даёт подсказку и удаляется', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'message_id' => 555,
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'photo' => [['file_id' => 'x', 'width' => 1, 'height' => 1]],
+        ],
+    ]);
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Сначала выбери карту'));
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/deleteMessage')
+        && (int) ($r->data()['message_id'] ?? 0) === 555);
+});
+
+test('callback merge с пустыми items отвечает «Список пуст» и остаётся в редакторе', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Альфа']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '9999',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'image' => null,
+        'items' => [],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'merge',
+        ],
+    ]);
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Список пуст'));
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm');
+});

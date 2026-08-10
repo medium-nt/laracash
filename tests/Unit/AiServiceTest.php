@@ -313,6 +313,41 @@ test('конкурирующие названия матчатся точно, �
         ->and($result[1]['category'])->toBe('Авто');
 });
 
+test('recognize возвращает распознанный массив без auth-сессии', function () {
+    // Arrange
+    Category::create(['title' => 'Аптеки', 'user_id' => 1, 'keywords' => '']);
+
+    // Create temporary test file
+    $testFilePath = storage_path('app/test/photo.png');
+    if (! file_exists(dirname($testFilePath))) {
+        mkdir(dirname($testFilePath), 0755, true);
+    }
+    file_put_contents($testFilePath, 'fake image content');
+
+    // Fake sequence: oauth → files upload → chat/completions
+    Http::fakeSequence()
+        ->push(['access_token' => 'test_token'], 200) // getToken - oauth
+        ->push(['id' => 'file_123'], 200) // downloadFile - upload
+        ->push([
+            'choices' => [[
+                'message' => ['content' => json_encode([['category' => 'Аптеки', 'cashback' => 5]])],
+            ]],
+        ], 200); // recognize - chat/completions
+
+    // Act
+    $result = callPrivateMethod(AiService::class, 'recognize', [1, $testFilePath]);
+
+    // Assert
+    expect($result)->not->toBeNull()
+        ->and($result[0]['category'])->toBe('Аптеки')
+        ->and($result[0]['cashback'])->toBe(5);
+
+    // Cleanup
+    if (file_exists($testFilePath)) {
+        unlink($testFilePath);
+    }
+});
+
 /**
  * Вспомогательная функция для вызова приватного static метода.
  */

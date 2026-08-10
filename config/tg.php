@@ -2,6 +2,7 @@
 
 return [
     'token' => env('TG_BOT_TOKEN'),
-//    'chat_id' => env('TG_BOT_CHAT_ID'),
-//    'webhook_url' => env('TG_BOT_WEBHOOK_URL'),
+    'webhook_secret' => env('TG_WEBHOOK_SECRET'),
+    'username' => env('TG_BOT_USERNAME'),
+    'api_base' => env('TG_API_BASE', 'https://api.telegram.org'),
 ];

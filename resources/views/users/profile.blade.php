@@ -57,6 +57,19 @@
                     </div>
 
                     <div class="form-group">
+                        <label>Telegram бот</label>
+                        @if($user->telegram_id)
+                            <span class="text-success"><small>✓ Привязан (ID: {{ $user->telegram_id }})</small></span>
+                        @else
+                            <a href="https://t.me/{{ config('tg.username') }}?start=link"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-primary">
+                                Привязать Telegram
+                            </a>
+                        @endif
+                    </div>
+
+                    <div class="form-group">
                         <label for="password">Новый пароль</label>
                         <input type="password" class="form-control" id="password" name="password"
                                placeholder="Пароль">

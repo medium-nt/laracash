@@ -25,7 +25,7 @@ Route::get('/search/{token}/manifest', [App\Http\Controllers\SearchController::c
 Route::get('/api/search-data/{token}', [App\Http\Controllers\SearchDataController::class, 'getFreshData'])
     ->name('search.data.fresh');
 
-//Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
+// Route::post('/upload', [FileUploadController::class, 'store'])->name('upload.store');
 
 Route::get('/tg-app', function () {
     return view('tg-app');
@@ -38,6 +38,11 @@ Route::middleware('auth')->group(function () {
         Route::put('', [App\Http\Controllers\UsersController::class, 'profileUpdate'])->name('profile.update');
         Route::get('/generate_search_token', [App\Http\Controllers\UsersController::class, 'generateSearchToken'])
             ->name('profile.generate_search_token');
+
+        Route::get('/bot-link', [App\Http\Controllers\BotLinkController::class, 'show'])
+            ->name('profile.bot_link.show');
+        Route::post('/bot-link', [App\Http\Controllers\BotLinkController::class, 'store'])
+            ->name('profile.bot_link.store');
     });
 
     Route::prefix('/categories')->group(function () {

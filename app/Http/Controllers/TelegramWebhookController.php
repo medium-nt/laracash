@@ -2,80 +2,50 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\Bot\BotConversationService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
+/**
+ * Контроллер для обработки Telegram webhook.
+ *
+ * Принимает update от Telegram Bot API через webhook.
+ * Проверяет секретный токен и делегирует обработку в BotConversationService.
+ */
 class TelegramWebhookController extends Controller
 {
-    public function handle(Request $request)
+    /**
+     * Создать новый экземпляр контроллера.
+     */
+    public function __construct(
+        private BotConversationService $conversation
+    ) {}
+
+    /**
+     * Обработать входящий webhook запрос от Telegram.
+     *
+     * @param  Request  $request  Запрос с update от Telegram
+     */
+    public function __invoke(Request $request): \Illuminate\Http\Response
     {
-        $update = $request->all();
-        Log::info('Telegram update:', $update);
-
-        $token = config('tg.token');
-        $apiUrl = "https://api.telegram.org/bot{$token}/";
-
-        Log::info('update: ' . json_encode($update['message']));
-
-        // === 1. Обычное сообщение ===
-        if (isset($update['message']) && !isset($update['message']['web_app_data'])) {
-            $chatId = $update['message']['chat']['id'];
-            $text   = $update['message']['text'] ?? '';
-
-            // Если пользователь написал "app" — отправляем кнопку для Mini App
-            if (strtolower($text) === 'app') {
-                $params = [
-                    'chat_id' => $chatId,
-                    'text'    => 'Запусти Mini App',
-                    'reply_markup' => json_encode([
-                        'inline_keyboard' => [
-                            [
-                                [
-                                    'text' => 'Открыть Mini App',
-                                    'web_app' => ['url' => 'https://laracash.test66.ru/tg-app']
-                                ]
-                            ]
-                        ]
-                    ])
-                ];
-            } else {
-                $params = [
-                    'chat_id' => $chatId,
-                    'text'    => "Ты написал сейчас: {$text}"
-                ];
-            }
-
-            file_get_contents($apiUrl . 'sendMessage?' . http_build_query($params));
+        // Fail-closed проверка секрета
+        $expected = (string) config('tg.webhook_secret');
+        if ($expected === '' || ! hash_equals($expected, (string) $request->header('X-Telegram-Bot-Api-Secret-Token'))) {
+            abort(403);
         }
 
-        // === 2. Данные из Mini App ===
-        if (isset($update['message']['web_app_data'])) {
-            $chatId = $update['message']['chat']['id'];
-            $data   = $update['message']['web_app_data']['data'];
+        $update = $request->json()->all();
 
-            Log::info("Mini App data: " . $data);
-
-            $params = [
-                'chat_id' => $chatId,
-                'text'    => "Из Mini App пришло: {$data}"
-            ];
-
-            file_get_contents($apiUrl . 'sendMessage?' . http_build_query($params));
+        // Идемпотентность по update_id: Telegram ретраит доставку, если ответ не пришёл
+        // вовремя (AI может тормозить). Cache::add атомарно — второй проход пропустится.
+        $updateId = $update['update_id'] ?? null;
+        if ($updateId !== null && ! Cache::add("bot.update.{$updateId}", true, 600)) {
+            return response('OK', 200);
         }
 
-        // === 3. Callback‑query (если будут кнопки без Mini App) ===
-        if (isset($update['callback_query'])) {
-            $chatId = $update['callback_query']['message']['chat']['id'];
-            $data   = $update['callback_query']['data'];
+        // Делегируем обработку в conversation service
+        $this->conversation->handle($update);
 
-            $params = [
-                'chat_id' => $chatId,
-                'text'    => "Нажата кнопка: {$data}"
-            ];
-
-            file_get_contents($apiUrl . 'sendMessage?' . http_build_query($params));
-        }
-
-        return response()->json(['status' => 'ok']);
+        return response('OK', 200);
     }
 }

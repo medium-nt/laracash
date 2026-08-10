@@ -25,10 +25,16 @@ class AiService
      */
     private const MIN_SUBSTRING_LENGTH = 4;
 
-    private static function getPrompt(): string
+    /**
+     * Генерирует промпт для GigaChat с категориями пользователя.
+     *
+     * @param  int  $userId  ID пользователя.
+     * @return string Текст промпта.
+     */
+    private static function getPrompt(int $userId): string
     {
         $categories = Category::query()
-            ->where('user_id', auth()->user()->id)
+            ->where('user_id', $userId)
             ->get(['title', 'keywords'])
             ->map(function (Category $category) {
                 $keywords = trim((string) $category->keywords);
@@ -53,28 +59,26 @@ class AiService
         ";
     }
 
-    public static function downloadFile(Card $card): string
+    /**
+     * Загружает файл в GigaChat и возвращает его ID.
+     *
+     * @param  string  $filePath  Абсолютный путь к файлу.
+     * @param  string  $originalName  Оригинальное имя файла.
+     * @return string ID файла в GigaChat или пустая строка при ошибке.
+     */
+    private static function downloadFile(string $filePath, string $originalName): string
     {
-        if (empty($card->cashback_image)) {
-            Log::channel('ai_api')->error('Путь к скриншоту кешбека пуст', ['card_id' => $card->id]);
-
-            return '';
-        }
-
-        $path = storage_path('app/public/card_cashback_image/'.$card->cashback_image);
-
-        if (! file_exists($path)) {
-            Log::channel('ai_api')->error('Файл скриншота кешбека не найден', [
-                'card_id' => $card->id,
-                'path' => $path,
+        if (! file_exists($filePath)) {
+            Log::channel('ai_api')->error('Файл не найден', [
+                'path' => $filePath,
             ]);
 
             return '';
         }
 
-        $fileSize = filesize($path);
+        $fileSize = filesize($filePath);
         Log::channel('ai_api')->info('Загрузка файла', [
-            'card_id' => $card->id,
+            'path' => $filePath,
             'size' => $fileSize.' bytes',
         ]);
 
@@ -85,8 +89,8 @@ class AiService
             'timeout' => 90,
         ])->attach(
             'file',
-            file_get_contents($path),
-            $card->cashback_image
+            file_get_contents($filePath),
+            $originalName
         )->post('https://gigachat.devices.sberbank.ru/api/v1/files', [
             'purpose' => 'general',
         ]);
@@ -101,7 +105,14 @@ class AiService
         return $response->json('id', '');
     }
 
-    private static function recognizeGigaChat(Card $card): bool
+    /**
+     * Распознаёт кешбэк на изображении через GigaChat.
+     *
+     * @param  int  $userId  ID пользователя.
+     * @param  string  $filePath  Абсолютный путь к файлу изображения.
+     * @return array|null Распознанный массив [{category, cashback}, ...] или null при ошибке.
+     */
+    private static function recognize(int $userId, string $filePath): ?array
     {
         try {
             $response = Http::withHeaders([
@@ -115,9 +126,9 @@ class AiService
                 'messages' => [
                     [
                         'role' => 'user',
-                        'content' => self::getPrompt(),
+                        'content' => self::getPrompt($userId),
                         'attachments' => [
-                            self::downloadFile($card),
+                            self::downloadFile($filePath, basename($filePath)),
                         ],
                     ],
                 ],
@@ -142,9 +153,9 @@ class AiService
                             'messages' => [
                                 [
                                     'role' => 'user',
-                                    'content' => self::getPrompt(),
+                                    'content' => self::getPrompt($userId),
                                     'attachments' => [
-                                        self::downloadFile($card),
+                                        self::downloadFile($filePath, basename($filePath)),
                                     ],
                                 ],
                             ],
@@ -155,14 +166,14 @@ class AiService
                         Log::channel('ai_api')
                             ->error('Не удалось обновить токен. Ошибка клиента: '.$response->body());
 
-                        return false;
+                        return null;
                     }
                 } else {
                     // Другие 4xx ошибки
                     Log::channel('ai_api')
                         ->error('Не удалось распознать кешбек. Ошибка клиента: '.$response->body());
 
-                    return false;
+                    return null;
                 }
             }
 
@@ -171,7 +182,7 @@ class AiService
                 Log::channel('ai_api')
                     ->error('Не удалось распознать кешбек. Ошибка сервера: '.$response->body());
 
-                return false;
+                return null;
             }
 
             $result = $response->json();
@@ -180,24 +191,19 @@ class AiService
 
             if (! is_array($decoded) || empty($decoded)) {
                 Log::channel('ai_api')->error('Не удалось распознать кешбек. Пустой или невалидный ответ модели.', [
-                    'card_id' => $card->id,
+                    'user_id' => $userId,
                     'content' => $result['choices'][0]['message']['content'] ?? null,
                 ]);
 
-                return false;
+                return null;
             }
 
-            $decoded = self::mapToUserCategories($decoded, auth()->user()->id);
-
-            $card->cashback_json = $decoded;
-            $card->save();
-
-            return true;
+            return self::mapToUserCategories($decoded, $userId);
         } catch (Exception $e) {
             Log::channel('ai_api')
                 ->error('Не удалось распознать кешбек. Ошибка: '.$e->getMessage());
 
-            return false;
+            return null;
         }
     }
 
@@ -359,8 +365,40 @@ class AiService
         return self::getToken();
     }
 
+    /**
+     * Распознаёт кешбэк на изображении через GigaChat (публичный метод-обёртка для импорта).
+     *
+     * @param  int  $userId  ID пользователя.
+     * @param  string  $filePath  Абсолютный путь к файлу изображения.
+     * @return array|null Распознанный массив [{category, cashback}, ...] или null при ошибке.
+     */
+    public function recognizeForImport(int $userId, string $filePath): ?array
+    {
+        return self::recognize($userId, $filePath);
+    }
+
+    /**
+     * Распознаёт и сохраняет кешбэк для карты (веб-обёртка).
+     *
+     * @param  Card  $card  Карта для распознавания.
+     * @return bool True если распознавание успешно, false в противном случае.
+     */
     public function getRecognizedCashback(Card $card): bool
     {
-        return self::recognizeGigaChat($card);
+        if (empty($card->cashback_image)) {
+            return false;
+        }
+
+        $path = storage_path('app/public/card_cashback_image/'.$card->cashback_image);
+        $recognized = self::recognize($card->user_id, $path);
+
+        if ($recognized === null) {
+            return false;
+        }
+
+        $card->cashback_json = $recognized;
+        $card->save();
+
+        return true;
     }
 }
