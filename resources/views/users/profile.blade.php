@@ -70,6 +70,19 @@
                     </div>
 
                     <div class="form-group">
+                        <label>MAX бот</label>
+                        @if($user->max_id)
+                            <span class="text-success"><small>✓ Привязан (ID: {{ $user->max_id }})</small></span>
+                        @else
+                            <a href="https://max.ru/{{ config('max.username') }}"
+                               target="_blank"
+                               class="btn btn-sm btn-outline-primary">
+                                Привязать MAX
+                            </a>
+                        @endif
+                    </div>
+
+                    <div class="form-group">
                         <label for="password">Новый пароль</label>
                         <input type="password" class="form-control" id="password" name="password"
                                placeholder="Пароль">
