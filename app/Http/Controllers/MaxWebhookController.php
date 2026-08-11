@@ -29,11 +29,10 @@ class MaxWebhookController extends Controller
      */
     public function __invoke(Request $request): \Illuminate\Http\Response
     {
-        // [ДИАГНОСТИКА] фиксируем любой входящий POST — до проверки секрета, чтобы понять, доходит ли вебхук от MAX вообще
+        // [ДИАГНОСТИКА] фиксируем любой входящий POST — все headers, чтобы найти как MAX передаёт секрет
         Log::info('MAX webhook IN', [
-            'has_secret' => $request->hasHeader('X-Max-Bot-Secret'),
-            'secret_match' => hash_equals((string) config('max.webhook_secret'), (string) $request->header('X-Max-Bot-Secret')),
             'ua' => $request->userAgent(),
+            'headers' => $request->headers->all(),
             'payload' => $request->all(),
         ]);
 
