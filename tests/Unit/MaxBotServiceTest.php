@@ -129,3 +129,13 @@ test('sendMessage шлёт header Authorization с токеном', function () 
 
     Http::assertSent(fn ($r) => $r->hasHeader('Authorization', 'TEST'));
 });
+
+test('caOptions отдаёт verify при заданном MAX_CACERT и пусто без него', function () {
+    $method = new ReflectionMethod(MaxBotService::class, 'caOptions');
+
+    config()->set('max.cacert', null);
+    expect($method->invoke(new MaxBotService))->toBe([]);
+
+    config()->set('max.cacert', '/var/www/cacert.pem');
+    expect($method->invoke(new MaxBotService))->toBe(['verify' => '/var/www/cacert.pem']);
+});

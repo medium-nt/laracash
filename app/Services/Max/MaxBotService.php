@@ -31,11 +31,30 @@ class MaxBotService
     }
 
     /**
-     * HTTP-клиент с авторизацией MAX (timeout 15 c, header Authorization).
+     * Опции SSL-проверки.
+     *
+     * На проде (Beget) системный CA-бандл не содержит Russian Trusted Root CA, которым
+     * подписан platform-api2.max.ru → cURL error 60. Если задан MAX_CACERT (путь к PEM =
+     * Mozilla bundle + Russian root), верифицируем по нему. Локально конфиг пуст → опция
+     * не передаётся (используется системный cacert из php.ini).
+     *
+     * @return array Опции для Http::withOptions() (['verify' => путь] или [])
+     */
+    private function caOptions(): array
+    {
+        $cacert = config('max.cacert');
+
+        return is_string($cacert) && $cacert !== '' ? ['verify' => $cacert] : [];
+    }
+
+    /**
+     * HTTP-клиент с авторизацией MAX (timeout 15 c, header Authorization, опциональная SSL-проверка по MAX_CACERT).
      */
     private function http(): PendingRequest
     {
-        return Http::timeout(15)->withHeaders(['Authorization' => (string) config('max.token')]);
+        return Http::timeout(15)
+            ->withHeaders(['Authorization' => (string) config('max.token')])
+            ->withOptions($this->caOptions());
     }
 
     /**
@@ -177,7 +196,7 @@ class MaxBotService
      */
     public function downloadPhoto(string $url): ?string
     {
-        $response = Http::timeout(15)->get($url);
+        $response = Http::timeout(15)->withOptions($this->caOptions())->get($url);
 
         if (! $response->successful()) {
             return null;
