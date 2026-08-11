@@ -22,7 +22,7 @@ test('webhook отклоняет запрос без секретного ток
 });
 
 test('webhook отклоняет запрос с неверным секретом', function () {
-    $this->withHeaders(['X-Max-Bot-Secret' => 'WRONG'])
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'WRONG'])
         ->postJson('/api/max/webhook', ['update_type' => 'message_created'])
         ->assertForbidden();
 });
@@ -30,7 +30,7 @@ test('webhook отклоняет запрос с неверным секрето
 test('webhook с пустым секретом в конфиге блокирует всё (fail-closed)', function () {
     config()->set('max.webhook_secret', null);
 
-    $this->withHeaders(['X-Max-Bot-Secret' => 'SECRET'])
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
         ->postJson('/api/max/webhook', ['update_type' => 'message_created'])
         ->assertForbidden();
 });
@@ -38,7 +38,7 @@ test('webhook с пустым секретом в конфиге блокиру�
 test('webhook с верным секретом делегирует в conversation и возвращает 200', function () {
     User::factory()->create(['max_id' => '42']);
 
-    $this->withHeaders(['X-Max-Bot-Secret' => 'SECRET'])
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
         ->postJson('/api/max/webhook', [
             'update_type' => 'message_created',
             'chat_id' => 100,
@@ -54,7 +54,7 @@ test('webhook с верным секретом делегирует в conversat
 test('webhook с message_callback отвечает через /answers', function () {
     User::factory()->create(['max_id' => '42']);
 
-    $this->withHeaders(['X-Max-Bot-Secret' => 'SECRET'])
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
         ->postJson('/api/max/webhook', [
             'update_type' => 'message_callback',
             'chat_id' => 100,
@@ -77,8 +77,8 @@ test('webhook идемпотентен: повторный message_id не об�
         'message' => ['message_id' => 999, 'body' => ['text' => '/start']],
     ];
 
-    $this->withHeaders(['X-Max-Bot-Secret' => 'SECRET'])->postJson('/api/max/webhook', $payload)->assertOk();
-    $this->withHeaders(['X-Max-Bot-Secret' => 'SECRET'])->postJson('/api/max/webhook', $payload)->assertOk();
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])->postJson('/api/max/webhook', $payload)->assertOk();
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])->postJson('/api/max/webhook', $payload)->assertOk();
 
     // sendMessage (меню) вызван ровно 1 раз — второй запрос пропущен по идемпотентности
     $count = collect(Http::recorded())

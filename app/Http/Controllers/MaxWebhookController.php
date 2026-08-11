@@ -5,13 +5,12 @@ namespace App\Http\Controllers;
 use App\Services\Bot\MaxConversationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
 
 /**
  * Контроллер для обработки MAX webhook.
  *
  * Принимает update от MAX Bot API через webhook.
- * Проверяет секретный токен (header X-Max-Bot-Secret) и делегирует в MaxConversationService.
+ * Проверяет секретный токен (header X-Max-Bot-API-Secret) и делегирует в MaxConversationService.
  */
 class MaxWebhookController extends Controller
 {
@@ -29,16 +28,9 @@ class MaxWebhookController extends Controller
      */
     public function __invoke(Request $request): \Illuminate\Http\Response
     {
-        // [ДИАГНОСТИКА] фиксируем любой входящий POST — все headers, чтобы найти как MAX передаёт секрет
-        Log::info('MAX webhook IN', [
-            'ua' => $request->userAgent(),
-            'headers' => $request->headers->all(),
-            'payload' => $request->all(),
-        ]);
-
-        // Fail-closed проверка секрета (header X-Max-Bot-Secret)
+        // Fail-closed проверка секрета MAX (header X-Max-Bot-API-Secret — подтверждено реальным вебхуком)
         $expected = (string) config('max.webhook_secret');
-        if ($expected === '' || ! hash_equals($expected, (string) $request->header('X-Max-Bot-Secret'))) {
+        if ($expected === '' || ! hash_equals($expected, (string) $request->header('X-Max-Bot-API-Secret'))) {
             abort(403);
         }
 
