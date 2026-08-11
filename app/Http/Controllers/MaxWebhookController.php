@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Bot\MaxConversationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Контроллер для обработки MAX webhook.
@@ -28,6 +29,14 @@ class MaxWebhookController extends Controller
      */
     public function __invoke(Request $request): \Illuminate\Http\Response
     {
+        // [ДИАГНОСТИКА] фиксируем любой входящий POST — до проверки секрета, чтобы понять, доходит ли вебхук от MAX вообще
+        Log::info('MAX webhook IN', [
+            'has_secret' => $request->hasHeader('X-Max-Bot-Secret'),
+            'secret_match' => hash_equals((string) config('max.webhook_secret'), (string) $request->header('X-Max-Bot-Secret')),
+            'ua' => $request->userAgent(),
+            'payload' => $request->all(),
+        ]);
+
         // Fail-closed проверка секрета (header X-Max-Bot-Secret)
         $expected = (string) config('max.webhook_secret');
         if ($expected === '' || ! hash_equals($expected, (string) $request->header('X-Max-Bot-Secret'))) {
