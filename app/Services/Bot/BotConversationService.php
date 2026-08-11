@@ -40,7 +40,7 @@ class BotConversationService
         $user = User::where('telegram_id', $tgId)->first();
         if ($user === null) {
             $url = config('app.url').'/profile/bot-link?tg='.$tgId;
-            $this->bot->sendMessage($chatId, "Сначала привяжи аккаунт LaraCash: {$url}");
+            $this->bot->sendMessage($chatId, 'Сначала привяжи аккаунт '.config('app.name').": {$url}");
 
             return;
         }

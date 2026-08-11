@@ -26,7 +26,7 @@
                 @if(empty($tg))
                     <p class="text-danger">Некорректная ссылка привязки.</p>
                 @else
-                    <p>Привязать Telegram (ID: {{ $tg }}) к вашему аккаунту LaraCash?</p>
+                    <p>Привязать Telegram (ID: {{ $tg }}) к вашему аккаунту {{ config('app.name') }}?</p>
 
                     <form method="POST" action="{{ route('profile.bot_link.store') }}">
                         @csrf
