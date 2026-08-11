@@ -43,6 +43,11 @@ Route::middleware('auth')->group(function () {
             ->name('profile.bot_link.show');
         Route::post('/bot-link', [App\Http\Controllers\BotLinkController::class, 'store'])
             ->name('profile.bot_link.store');
+
+        Route::get('/max-link', [App\Http\Controllers\MaxLinkController::class, 'show'])
+            ->name('profile.max_link.show');
+        Route::post('/max-link', [App\Http\Controllers\MaxLinkController::class, 'store'])
+            ->name('profile.max_link.store');
     });
 
     Route::prefix('/categories')->group(function () {
