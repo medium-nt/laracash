@@ -22,18 +22,24 @@ class TelegramSetupCommand extends Command
     protected $description = 'Настроить бот: установить команды нативного меню (кнопка «Меню» в Telegram)';
 
     /**
-     * Команды нативного меню бота (видны в кнопке «Меню» клиента Telegram).
+     * Устанавливает команды нативного меню TG-бота.
+     *
+     * @param  TelegramBotService  $bot  Транспорт Telegram
+     * @return int Код завершения (0 - успех)
      */
     public function handle(TelegramBotService $bot): int
     {
         $commands = [
             ['command' => 'menu', 'description' => 'Главное меню'],
-            ['command' => 'start', 'description' => 'Начать работу'],
         ];
 
-        $bot->setMyCommands($commands);
+        if (! $bot->setMyCommands($commands)) {
+            $this->error('Не удалось установить команду меню бота (проверьте токен и сеть).');
 
-        $this->info('Команды меню бота установлены: /menu, /start.');
+            return self::FAILURE;
+        }
+
+        $this->info('Команда меню бота установлена: /menu.');
         $this->comment('Кнопка «Меню» появится в клиенте Telegram (перезапусти чат бота, если не видна).');
 
         return self::SUCCESS;
