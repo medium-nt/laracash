@@ -6,6 +6,7 @@ use App\Models\Card;
 use App\Models\Category;
 use App\Services\AiService;
 use App\Services\CashbackService;
+use App\Services\CategoryMatcher;
 
 class CashbackImportService
 {
@@ -192,10 +193,11 @@ class CashbackImportService
     }
 
     /**
-     * Нормализует название для сравнения: нижний регистр + схлопывание пробелов + trim.
+     * Нормализует название для сравнения — делегирует в CategoryMatcher::normalize
+     * (единая нормализация для всех путей сопоставления категорий).
      */
     private static function norm(string $title): string
     {
-        return preg_replace('/\s+/u', ' ', mb_strtolower(trim($title)));
+        return CategoryMatcher::normalize($title);
     }
 }

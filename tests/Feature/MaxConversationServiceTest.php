@@ -167,8 +167,10 @@ test('callback cancel возвращает в idle', function () {
 });
 
 test('parseItem парсит название с пробелами и процент', function () {
-    expect(MaxConversationService::parseItem('Аптеки 5'))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => ''])
-        ->and(MaxConversationService::parseItem('Кафе и рестораны 3.5'))->toBe(['title' => 'Кафе и рестораны', 'percent' => 3.5, 'mcc' => ''])
+    expect(MaxConversationService::parseItem('Аптеки 5'))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '', 'force_new' => false])
+        ->and(MaxConversationService::parseItem('Кафе и рестораны 3.5'))->toBe(['title' => 'Кафе и рестораны', 'percent' => 3.5, 'mcc' => '', 'force_new' => false])
+        // Маркер «+» → принудительно новая (force_new=true, «+» срезан)
+        ->and(MaxConversationService::parseItem('+Кафе 5'))->toBe(['title' => 'Кафе', 'percent' => 5.0, 'mcc' => '', 'force_new' => true])
         ->and(MaxConversationService::parseItem('Кино'))->toBeNull()
         ->and(MaxConversationService::parseItem(''))->toBeNull();
 });
@@ -178,6 +180,7 @@ test('parseItem разбирает примечание через пробел 
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => 'только 03',
+        'force_new' => false,
     ])
         ->and(MaxConversationService::parseItem('Кафе 3,5 по будням')['mcc'])->toBe('по будням')
         ->and(MaxConversationService::parseItem('Аптеки 5% только 03')['mcc'])->toBe('только 03')
@@ -187,7 +190,7 @@ test('parseItem разбирает примечание через пробел 
 test('parseItem не пропускает перенос строки в названии (защита кнопки)', function () {
     // Перенос внутри названия → null (иначе \n попал бы в текст кнопки и сломал рендер)
     expect(MaxConversationService::parseItem("Аптеки\nсамые дешёвые 5"))->toBeNull()
-        ->and(MaxConversationService::parseItem("Аптеки\n5"))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '']);
+        ->and(MaxConversationService::parseItem("Аптеки\n5"))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '', 'force_new' => false]);
 });
 
 test('callback del удаляет пункт и edit-ит редактор', function () {

@@ -286,12 +286,22 @@ test('parseItem парсит название с пробелами и проц�
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => '',
+        'force_new' => false,
+    ]);
+
+    // Маркер «+» → принудительно новая категория (force_new=true, сам «+» срезан)
+    expect(App\Services\Bot\BotConversationService::parseItem('+Кафе 5'))->toBe([
+        'title' => 'Кафе',
+        'percent' => 5.0,
+        'mcc' => '',
+        'force_new' => true,
     ]);
 
     expect(App\Services\Bot\BotConversationService::parseItem('Кафе и рестораны 3.5'))->toBe([
         'title' => 'Кафе и рестораны',
         'percent' => 3.5,
         'mcc' => '',
+        'force_new' => false,
     ]);
 
     expect(App\Services\Bot\BotConversationService::parseItem('Кино'))->toBeNull();
@@ -305,6 +315,7 @@ test('parseItem разбирает примечание через пробел 
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => 'только 03',
+        'force_new' => false,
     ]);
 
     // Десятичный процент + примечание
@@ -312,6 +323,7 @@ test('parseItem разбирает примечание через пробел 
         'title' => 'Кафе',
         'percent' => 3.5,
         'mcc' => 'по будням',
+        'force_new' => false,
     ]);
 
     // «%» после числа не мешает примечанию
@@ -319,6 +331,7 @@ test('parseItem разбирает примечание через пробел 
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => 'только 03',
+        'force_new' => false,
     ]);
 
     // Без примечания — mcc=''
@@ -333,6 +346,7 @@ test('parseItem не пропускает перенос строки в наз�
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => '',
+        'force_new' => false,
     ]);
 });
 
