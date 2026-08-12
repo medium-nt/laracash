@@ -83,7 +83,7 @@ class CashbackImportService
      *
      * @param  int  $userId  ID пользователя.
      * @param  int  $cardId  ID карты.
-     * @param  array  $raw  Распознанный массив [{category, cashback}, ...].
+     * @param  array  $raw  Распознанный массив [{category, cashback, mcc?}, ...].
      * @return array{created: list<string>} Список названий созданных категорий.
      */
     public function apply(int $userId, int $cardId, array $raw): array
@@ -125,7 +125,7 @@ class CashbackImportService
                 if ($percent > 0) {
                     $categories[$userTitles[$title]] = [
                         'percent' => $percent,
-                        'mcc' => '',
+                        'mcc' => (string) ($item['mcc'] ?? ''),
                     ];
                 }
             }

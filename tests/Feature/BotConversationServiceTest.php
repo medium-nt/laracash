@@ -285,16 +285,55 @@ test('parseItem парсит название с пробелами и проц�
     expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5'))->toBe([
         'title' => 'Аптеки',
         'percent' => 5.0,
+        'mcc' => '',
     ]);
 
     expect(App\Services\Bot\BotConversationService::parseItem('Кафе и рестораны 3.5'))->toBe([
         'title' => 'Кафе и рестораны',
         'percent' => 3.5,
+        'mcc' => '',
     ]);
 
     expect(App\Services\Bot\BotConversationService::parseItem('Кино'))->toBeNull();
 
     expect(App\Services\Bot\BotConversationService::parseItem(''))->toBeNull();
+});
+
+test('parseItem разбирает примечание через пробел (процент = первое число)', function () {
+    // Примечание с цифрами (MCC «03») не путается с процентом — процент это первое число
+    expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5 только 03'))->toBe([
+        'title' => 'Аптеки',
+        'percent' => 5.0,
+        'mcc' => 'только 03',
+    ]);
+
+    // Десятичный процент + примечание
+    expect(App\Services\Bot\BotConversationService::parseItem('Кафе 3,5 по будням'))->toBe([
+        'title' => 'Кафе',
+        'percent' => 3.5,
+        'mcc' => 'по будням',
+    ]);
+
+    // «%» после числа не мешает примечанию
+    expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5% только 03'))->toBe([
+        'title' => 'Аптеки',
+        'percent' => 5.0,
+        'mcc' => 'только 03',
+    ]);
+
+    // Без примечания — mcc=''
+    expect(App\Services\Bot\BotConversationService::parseItem('Кафе 3')['mcc'])->toBe('');
+});
+
+test('parseItem не пропускает перенос строки в названии (защита inline-кнопки)', function () {
+    // Перенос внутри названия → null (иначе \n попал бы в текст кнопки и сломал рендер)
+    expect(App\Services\Bot\BotConversationService::parseItem("Аптеки\nсамые дешёвые 5"))->toBeNull();
+    // Перенос между названием и процентом — допустим (title без \n)
+    expect(App\Services\Bot\BotConversationService::parseItem("Аптеки\n5"))->toBe([
+        'title' => 'Аптеки',
+        'percent' => 5.0,
+        'mcc' => '',
+    ]);
 });
 
 test('callback del удаляет пункт', function () {
@@ -838,4 +877,165 @@ test('callback merge с пустыми items отвечает «Список п�
 
     $state = Cache::get('bot.state.42');
     expect($state['name'])->toBe('await_confirm');
+});
+
+test('callback note переводит в await_note с index', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_note',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'note:0',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_note')
+        ->and($state['index'])->toBe(0);
+});
+
+test('сообщение в await_note сохраняет примечание в item', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_note',
+        'index' => 0,
+        'card_id' => 123,
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => null]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '5912, только по будням',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['items'][0]['mcc'])->toBe('5912, только по будням');
+});
+
+test('/skip в await_note убирает примечание', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_note',
+        'index' => 0,
+        'card_id' => 123,
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => 'старое примечание']],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '/skip',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['items'][0]['mcc'])->toBe('');
+});
+
+test('правка в await_edit без примечания сохраняет прежнее (mcc не затирается)', function () {
+    User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_edit',
+        'index' => 0,
+        'card_id' => 123,
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '5912']],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'Аптеки 7', // без «|» — mcc должен сохраниться
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['items'][0]['percent'])->toBe(7.0)
+        ->and($state['items'][0]['mcc'])->toBe('5912');
+});
+
+test('buildEditorText показывает примечание в той же строке через «·»', function () {
+    $service = app(BotConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorText');
+    $text = $method->invoke($service, [
+        ['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => 1, 'mcc' => '5912'],
+        ['title' => 'Кафе', 'percent' => 3.0, 'category_id' => null, 'mcc' => ''],
+    ]);
+
+    // Примечание в той же строке, что и процент (через «·»), без переноса
+    expect($text)->toContain('✅ Аптеки — 5% · 📝 5912')
+        ->and($text)->toContain('🆕 Кафе — 3%');
+    // 📝 ровно один — только у Аптек (у Кафе mcc пустой)
+    expect(substr_count($text, '📝'))->toBe(1);
+    // Пункты разделены пустой строкой
+    expect($text)->toContain("5912\n\n2.");
+});
+
+test('callback merge сохраняет примечание items в pivot', function () {
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['user_id' => $user->id, 'title' => 'Альфа']);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '9999',
+        'color' => '#000000',
+        'cashback_json' => null,
+    ]);
+    $category = \App\Models\Category::create([
+        'user_id' => $user->id,
+        'title' => 'Аптеки',
+        'keywords' => '',
+        'icon' => '',
+        'color' => '#000000',
+    ]);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => $card->id,
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '5912']],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(BotConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'merge',
+        ],
+    ]);
+
+    $cashback = \App\Models\Cashback::query()
+        ->where('card_id', $card->id)
+        ->where('category_id', $category->id)
+        ->first();
+
+    expect($cashback)->not->toBeNull()
+        ->and($cashback->mcc)->toBe('5912');
 });
