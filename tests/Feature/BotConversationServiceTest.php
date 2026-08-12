@@ -528,8 +528,6 @@ test('callback replace удаляет старые категории и зап�
         'user_id' => $user->id,
         'title' => 'Аптеки',
         'keywords' => 'аптека,лекарства,фармация',
-        'icon' => '',
-        'color' => '#000000',
     ]);
 
     // Создаём существующую запись Cashback для карты
@@ -592,16 +590,12 @@ test('callback merge НЕ удаляет старые категории', funct
         'user_id' => $user->id,
         'title' => 'Кафе',
         'keywords' => 'кафе,ресторан,еда',
-        'icon' => '',
-        'color' => '#000000',
     ]);
 
     $category2 = \App\Models\Category::create([
         'user_id' => $user->id,
         'title' => 'Аптеки',
         'keywords' => 'аптека,лекарства',
-        'icon' => '',
-        'color' => '#000000',
     ]);
 
     // Создаём существующую запись Cashback (старая категория)
@@ -1024,8 +1018,6 @@ test('callback merge сохраняет примечание items в pivot', fu
         'user_id' => $user->id,
         'title' => 'Аптеки',
         'keywords' => '',
-        'icon' => '',
-        'color' => '#000000',
     ]);
 
     Cache::put('bot.state.42', [

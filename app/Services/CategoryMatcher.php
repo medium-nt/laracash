@@ -109,20 +109,20 @@ class CategoryMatcher
      */
     public function match(string $title, Collection $categories): ?Category
     {
-        $needle = self::normalize($title);
+        $input = self::normalize($title);
 
-        if ($needle === '') {
+        if ($input === '') {
             return null;
         }
 
         // 1-2. Точное совпадение по названию и по синонимам — самый надёжный вариант.
         foreach ($categories as $category) {
-            if (self::normalize((string) $category->title) === $needle) {
+            if (self::normalize((string) $category->title) === $input) {
                 return $category;
             }
 
             foreach (self::keywordsTokens($category->keywords) as $token) {
-                if ($token === $needle) {
+                if ($token === $input) {
                     return $category;
                 }
             }
@@ -136,11 +136,11 @@ class CategoryMatcher
         foreach ($byTitleLengthDesc as $category) {
             $normalizedTitle = self::normalize((string) $category->title);
 
-            if (mb_strlen($normalizedTitle) < self::MIN_SUBSTRING_LENGTH || mb_strlen($needle) < self::MIN_SUBSTRING_LENGTH) {
+            if (mb_strlen($normalizedTitle) < self::MIN_SUBSTRING_LENGTH || mb_strlen($input) < self::MIN_SUBSTRING_LENGTH) {
                 continue;
             }
 
-            if (str_contains($needle, $normalizedTitle) || str_contains($normalizedTitle, $needle)) {
+            if (str_contains($input, $normalizedTitle) || str_contains($normalizedTitle, $input)) {
                 return $category;
             }
         }
@@ -155,7 +155,7 @@ class CategoryMatcher
                 continue;
             }
 
-            similar_text($needle, $normalizedTitle, $percent);
+            similar_text($input, $normalizedTitle, $percent);
 
             if ($percent > $bestPercent) {
                 $bestPercent = $percent;
@@ -180,12 +180,12 @@ class CategoryMatcher
      */
     public function matchExact(string $title, Collection $categories): ?Category
     {
-        $needle = self::normalize($title);
+        $input = self::normalize($title);
 
-        if ($needle === '') {
+        if ($input === '') {
             return null;
         }
 
-        return $categories->first(fn ($c) => self::normalize((string) $c->title) === $needle);
+        return $categories->first(fn ($c) => self::normalize((string) $c->title) === $input);
     }
 }
