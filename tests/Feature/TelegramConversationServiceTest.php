@@ -4,7 +4,7 @@ use App\Models\Bank;
 use App\Models\Card;
 use App\Models\Role;
 use App\Models\User;
-use App\Services\Bot\BotConversationService;
+use App\Services\Bot\TelegramConversationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -24,7 +24,7 @@ beforeEach(function () {
 test('/start от привязанного юзера устанавливает состояние idle', function () {
     User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start'],
     ]);
 
@@ -34,7 +34,7 @@ test('/start от привязанного юзера устанавливает
 });
 
 test('/start от НЕ привязанного юзера не устанавливает состояние', function () {
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => ['chat' => ['id' => 100], 'from' => ['id' => 999], 'text' => '/start'],
     ]);
 
@@ -46,7 +46,7 @@ test('/start от НЕ привязанного юзера не устанавл
 test('/menu работает так же как /start', function () {
     User::factory()->create(['telegram_id' => '42', 'name' => 'Тест']);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/menu'],
     ]);
 
@@ -57,7 +57,7 @@ test('/menu работает так же как /start', function () {
 test('callback cmd:update без карт устанавливает состояние idle', function () {
     User::factory()->create(['telegram_id' => '42']);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb123',
             'from' => ['id' => 42],
@@ -82,7 +82,7 @@ test('callback cmd:update с картами устанавливает сост�
         'cashback_json' => null,
     ]);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb123',
             'from' => ['id' => 42],
@@ -107,7 +107,7 @@ test('callback с выбором карты переводит в состоян
         'cashback_json' => null,
     ]);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb456',
             'from' => ['id' => 42],
@@ -147,7 +147,7 @@ test('callback merge (и алиас save) применяет кешбэк из i
     ], now()->addSeconds(1800));
 
     // Тестируем новый callback 'merge'
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb789',
             'from' => ['id' => 42],
@@ -176,7 +176,7 @@ test('callback merge (и алиас save) применяет кешбэк из i
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb790',
             'from' => ['id' => 42],
@@ -199,7 +199,7 @@ test('callback cancel отменяет применение', function () {
         'raw' => [],
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb000',
             'from' => ['id' => 42],
@@ -217,7 +217,7 @@ test('callback cancel отменяет применение', function () {
 test('клавиатура карт пуста если у юзера нет карт', function () {
     User::factory()->create(['telegram_id' => '42']);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb111',
             'from' => ['id' => 42],
@@ -259,7 +259,7 @@ test('callback card с чужим card_id шлёт "Карта не найден
     Cache::put('bot.state.1', ['name' => 'idle'], now()->addSeconds(1800));
 
     // Act: callback от User A с card_id принадлежащим User B
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb999',
             'from' => ['id' => 1],
@@ -282,7 +282,7 @@ test('callback card с чужим card_id шлёт "Карта не найден
 });
 
 test('parseItem парсит название с пробелами и процент', function () {
-    expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5'))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Аптеки 5'))->toBe([
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => '',
@@ -290,28 +290,28 @@ test('parseItem парсит название с пробелами и проц�
     ]);
 
     // Маркер «+» → принудительно новая категория (force_new=true, сам «+» срезан)
-    expect(App\Services\Bot\BotConversationService::parseItem('+Кафе 5'))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem('+Кафе 5'))->toBe([
         'title' => 'Кафе',
         'percent' => 5.0,
         'mcc' => '',
         'force_new' => true,
     ]);
 
-    expect(App\Services\Bot\BotConversationService::parseItem('Кафе и рестораны 3.5'))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Кафе и рестораны 3.5'))->toBe([
         'title' => 'Кафе и рестораны',
         'percent' => 3.5,
         'mcc' => '',
         'force_new' => false,
     ]);
 
-    expect(App\Services\Bot\BotConversationService::parseItem('Кино'))->toBeNull();
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Кино'))->toBeNull();
 
-    expect(App\Services\Bot\BotConversationService::parseItem(''))->toBeNull();
+    expect(App\Services\Bot\TelegramConversationService::parseItem(''))->toBeNull();
 });
 
 test('parseItem разбирает примечание через пробел (процент = первое число)', function () {
     // Примечание с цифрами (MCC «03») не путается с процентом — процент это первое число
-    expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5 только 03'))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Аптеки 5 только 03'))->toBe([
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => 'только 03',
@@ -319,7 +319,7 @@ test('parseItem разбирает примечание через пробел 
     ]);
 
     // Десятичный процент + примечание
-    expect(App\Services\Bot\BotConversationService::parseItem('Кафе 3,5 по будням'))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Кафе 3,5 по будням'))->toBe([
         'title' => 'Кафе',
         'percent' => 3.5,
         'mcc' => 'по будням',
@@ -327,7 +327,7 @@ test('parseItem разбирает примечание через пробел 
     ]);
 
     // «%» после числа не мешает примечанию
-    expect(App\Services\Bot\BotConversationService::parseItem('Аптеки 5% только 03'))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Аптеки 5% только 03'))->toBe([
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => 'только 03',
@@ -335,14 +335,14 @@ test('parseItem разбирает примечание через пробел 
     ]);
 
     // Без примечания — mcc=''
-    expect(App\Services\Bot\BotConversationService::parseItem('Кафе 3')['mcc'])->toBe('');
+    expect(App\Services\Bot\TelegramConversationService::parseItem('Кафе 3')['mcc'])->toBe('');
 });
 
 test('parseItem не пропускает перенос строки в названии (защита inline-кнопки)', function () {
     // Перенос внутри названия → null (иначе \n попал бы в текст кнопки и сломал рендер)
-    expect(App\Services\Bot\BotConversationService::parseItem("Аптеки\nсамые дешёвые 5"))->toBeNull();
+    expect(App\Services\Bot\TelegramConversationService::parseItem("Аптеки\nсамые дешёвые 5"))->toBeNull();
     // Перенос между названием и процентом — допустим (title без \n)
-    expect(App\Services\Bot\BotConversationService::parseItem("Аптеки\n5"))->toBe([
+    expect(App\Services\Bot\TelegramConversationService::parseItem("Аптеки\n5"))->toBe([
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => '',
@@ -366,7 +366,7 @@ test('callback del удаляет пункт', function () {
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb_del',
             'from' => ['id' => 42],
@@ -401,7 +401,7 @@ test('callback edit переводит в await_edit', function () {
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb_edit',
             'from' => ['id' => 42],
@@ -433,7 +433,7 @@ test('сообщение в состоянии await_edit обновляет э�
     ], now()->addSeconds(1800));
 
     // Отправляем сообщение с новым названием и процентом
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'chat' => ['id' => 100],
             'from' => ['id' => 42],
@@ -462,7 +462,7 @@ test('сообщение в состоянии await_add добавляет эл
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'chat' => ['id' => 100],
             'from' => ['id' => 42],
@@ -493,7 +493,7 @@ test('сообщение с неверным форматом возвращае
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'chat' => ['id' => 100],
             'from' => ['id' => 42],
@@ -551,7 +551,7 @@ test('callback replace удаляет старые категории и зап�
     ], now()->addSeconds(1800));
 
     // Вызываем callback replace
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb_replace',
             'from' => ['id' => 42],
@@ -619,7 +619,7 @@ test('callback merge НЕ удаляет старые категории', funct
     ], now()->addSeconds(1800));
 
     // Вызываем callback merge
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb_merge',
             'from' => ['id' => 42],
@@ -645,7 +645,7 @@ test('callback merge НЕ удаляет старые категории', funct
 });
 
 test('buildEditorKeyboard использует понятный нейминг без дубля «Добавить»', function () {
-    $service = app(BotConversationService::class);
+    $service = app(TelegramConversationService::class);
     $method = new ReflectionMethod($service, 'buildEditorKeyboard');
     $kb = $method->invoke($service, [
         ['title' => 'Аптеки', 'percent' => 5.0],
@@ -665,7 +665,7 @@ test('buildEditorKeyboard использует понятный нейминг �
 });
 
 test('buildEditorKeyboard: «Добавить категорию» идёт первой строкой', function () {
-    $service = app(BotConversationService::class);
+    $service = app(TelegramConversationService::class);
     $method = new ReflectionMethod($service, 'buildEditorKeyboard');
     $kb = $method->invoke($service, [
         ['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => 1],
@@ -690,7 +690,7 @@ test('обработка ввода в await_edit удаляет сообщен�
         'last_bot_msg' => 7,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'message_id' => 99,
             'chat' => ['id' => 100],
@@ -716,7 +716,7 @@ test('обработка ввода в await_edit удаляет сообщен�
 
 test('повторный transient удаляет предыдущее сообщение бота — меню не копится', function () {
     User::factory()->create(['telegram_id' => '42', 'name' => 'Тест']);
-    $svc = app(BotConversationService::class);
+    $svc = app(TelegramConversationService::class);
 
     // /start → меню (last_bot_msg запомнен в state)
     $svc->handle(['message' => ['message_id' => 501, 'chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start']]);
@@ -730,7 +730,7 @@ test('повторный transient удаляет предыдущее сооб�
 test('текстовое сообщение пользователя удаляется (команды/ввод чистятся)', function () {
     User::factory()->create(['telegram_id' => '42', 'name' => 'Тест']);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => ['message_id' => 333, 'chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/menu'],
     ]);
 
@@ -759,7 +759,7 @@ test('при сохранении кешбэка удаляется скрин (
         'photo_msg_id' => 777,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb1',
             'from' => ['id' => 42],
@@ -773,7 +773,7 @@ test('при сохранении кешбэка удаляется скрин (
 });
 
 test('buildEditorText помечает существующие ✅ и новые 🆕', function () {
-    $service = app(BotConversationService::class);
+    $service = app(TelegramConversationService::class);
     $method = new ReflectionMethod($service, 'buildEditorText');
     $text = $method->invoke($service, [
         ['title' => 'Супермаркеты', 'percent' => 5.0, 'category_id' => 1],
@@ -806,7 +806,7 @@ test('callback merge создаёт недостающую категорию и
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb',
             'from' => ['id' => 42],
@@ -824,7 +824,7 @@ test('callback merge создаёт недостающую категорию и
 });
 
 test('buildEditorText экранирует спецсимволы в названии (защита HTML-парсинга)', function () {
-    $service = app(BotConversationService::class);
+    $service = app(TelegramConversationService::class);
     $method = new ReflectionMethod($service, 'buildEditorText');
     $text = $method->invoke($service, [
         ['title' => 'Кафе & Рестораны <b>x</b>', 'percent' => 5.0, 'category_id' => 1],
@@ -837,7 +837,7 @@ test('buildEditorText экранирует спецсимволы в назва�
 test('фото вне состояния await_photo даёт подсказку и удаляется', function () {
     User::factory()->create(['telegram_id' => '42']);
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'message_id' => 555,
             'chat' => ['id' => 100],
@@ -871,7 +871,7 @@ test('callback merge с пустыми items отвечает «Список п�
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb',
             'from' => ['id' => 42],
@@ -898,7 +898,7 @@ test('callback note переводит в await_note с index', function () {
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb_note',
             'from' => ['id' => 42],
@@ -924,7 +924,7 @@ test('сообщение в await_note сохраняет примечание �
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'chat' => ['id' => 100],
             'from' => ['id' => 42],
@@ -949,7 +949,7 @@ test('/skip в await_note убирает примечание', function () {
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'chat' => ['id' => 100],
             'from' => ['id' => 42],
@@ -974,7 +974,7 @@ test('правка в await_edit без примечания сохраняет 
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'message' => [
             'chat' => ['id' => 100],
             'from' => ['id' => 42],
@@ -988,7 +988,7 @@ test('правка в await_edit без примечания сохраняет 
 });
 
 test('buildEditorText показывает примечание в той же строке через «·»', function () {
-    $service = app(BotConversationService::class);
+    $service = app(TelegramConversationService::class);
     $method = new ReflectionMethod($service, 'buildEditorText');
     $text = $method->invoke($service, [
         ['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => 1, 'mcc' => '5912'],
@@ -1028,7 +1028,7 @@ test('callback merge сохраняет примечание items в pivot', fu
         'msg_id' => 1,
     ], now()->addSeconds(1800));
 
-    app(BotConversationService::class)->handle([
+    app(TelegramConversationService::class)->handle([
         'callback_query' => [
             'id' => 'cb',
             'from' => ['id' => 42],
