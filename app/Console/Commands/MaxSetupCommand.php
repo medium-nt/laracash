@@ -30,13 +30,17 @@ class MaxSetupCommand extends Command
     public function handle(MaxBotService $bot): int
     {
         $commands = [
-            ['command' => 'menu', 'description' => 'Главное меню'],
-            ['command' => 'start', 'description' => 'Начать работу'],
+            ['name' => '/menu', 'description' => 'Главное меню'],
         ];
 
-        $bot->setMyCommands($commands);
+        if (! $bot->setMyCommands($commands)) {
+            $this->error('Не удалось установить команду меню MAX-бота (проверьте токен и сеть).');
 
-        $this->info('Команды меню MAX-бота установлены: /menu, /start.');
+            return self::FAILURE;
+        }
+
+        $this->info('Команда меню MAX-бота установлена: /menu.');
+        $this->comment('Перезапусти диалог с ботом, если меню не появилось в клиенте MAX.');
 
         return self::SUCCESS;
     }

@@ -9,7 +9,7 @@ test('команда max:setup зарегистрирована', function () {
     expect(array_keys(Artisan::all()))->toContain('max:setup');
 });
 
-test('max:setup вызывает PATCH /me/commands с /menu и /start', function () {
+test('max:setup вызывает PATCH /me/commands только с /menu (поле name)', function () {
     Http::fake(['*platform-api2.max.ru/*' => Http::response(null, 200)]);
     config()->set('max.token', 'TEST');
 
@@ -22,7 +22,15 @@ test('max:setup вызывает PATCH /me/commands с /menu и /start', functio
         $commands = json_decode($r->body(), true)['commands'] ?? null;
 
         return is_array($commands)
-            && collect($commands)->contains(fn ($c) => ($c['command'] ?? null) === 'menu')
-            && collect($commands)->contains(fn ($c) => ($c['command'] ?? null) === 'start');
+            && collect($commands)->contains(fn ($c) => ($c['name'] ?? null) === '/menu')
+            && ! collect($commands)->contains(fn ($c) => ($c['name'] ?? null) === '/start');
     });
+});
+
+test('max:setup возвращает FAILURE при ошибке API', function () {
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(null, 500)]);
+    config()->set('max.token', 'TEST');
+
+    expect(Artisan::call('max:setup'))
+        ->toBe(\Symfony\Component\Console\Command\Command::FAILURE);
 });
