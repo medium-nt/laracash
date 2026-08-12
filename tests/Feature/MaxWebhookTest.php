@@ -2,6 +2,8 @@
 
 use App\Models\Bank;
 use App\Models\Card;
+use App\Models\Cashback;
+use App\Models\Category;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -183,5 +185,156 @@ test('callback cmd:recheck от НЕпривязанного повторяет 
 
         return str_contains($data['text'] ?? '', 'привяжи аккаунт')
             && str_contains(json_encode($data['attachments'] ?? []), 'cmd:recheck');
+    });
+});
+
+// ============ Текстовый ввод кешбэка (альтернатива скриншоту) ============
+
+/**
+ * Сценарий «выбор карты → ввод категорий текстом → редактор» для MAX.
+ * Создаёт карту и переводит юзера в await_photo (callback card:{id}).
+ */
+function maxSendTextList(int $userId, int $cardId, string $text): void
+{
+    $headers = ['X-Max-Bot-API-Secret' => 'SECRET'];
+
+    test()->withHeaders($headers)->postJson('/api/max/webhook', realMaxCallback($userId, 'card:'.$cardId, 100, 'cb_card'))->assertOk();
+    test()->withHeaders($headers)->postJson('/api/max/webhook', realMaxMessage($userId, $text))->assertOk();
+}
+
+test('в await_photo текст-список открывает редактор: своя категория ✅, новая 🆕', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+    // «Аптеки» уже есть у юзера → ✅; «Кафе» нет → 🆕
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => 'Аптеки']);
+
+    maxSendTextList(42, $card->id, "Аптеки 5\nКафе 3,5");
+
+    // Редактор: содержит заголовок и обе категории
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Проверь распознанное')
+            && str_contains($data['text'] ?? '', 'Аптеки')
+            && str_contains($data['text'] ?? '', 'Кафе');
+    });
+});
+
+test('текст-список с кривыми строками: валидные в редактор, невалидные — в подсказку', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+
+    maxSendTextList(42, $card->id, "Аптеки 5\n--- билеты ---\nКафе 3,5");
+
+    // Редактор получил валидные строки
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Проверь распознанное')
+            && str_contains($data['text'] ?? '', 'Аптеки')
+            && str_contains($data['text'] ?? '', 'Кафе');
+    });
+    // Невалидная строка упомянута отдельной подсказкой
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Не понял строки')
+            && str_contains($data['text'] ?? '', 'билеты');
+    });
+});
+
+test('полностью непонятный текст не открывает редактор, подсказывает формат', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+
+    maxSendTextList(42, $card->id, "привет\nкак дела");
+
+    // Подсказка о формате...
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Не получилось распознать');
+    });
+    // ...а редактор НЕ открывался
+    Http::assertNotSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Проверь распознанное');
+    });
+});
+
+test('e2e: текст-список → Сохранить(merge) пишет pivot и cashback_json', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+
+    maxSendTextList(42, $card->id, "Аптеки 5\nКафе 3,5");
+
+    // Сохранить (merge) → apply → pivot + cashback_json
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxCallback(42, 'merge', 100, 'cb_merge'))
+        ->assertOk();
+
+    expect(Cashback::where('card_id', $card->id)->count())->toBe(2);
+    expect($card->fresh()->cashback_json)->toHaveCount(2);
+});
+
+test('после полностью невалидного ввода можно повторить — состояние сохранено в await_photo', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+
+    $headers = ['X-Max-Bot-API-Secret' => 'SECRET'];
+
+    $this->withHeaders($headers)->postJson('/api/max/webhook', realMaxCallback(42, 'card:'.$card->id, 100, 'cb_p5'))->assertOk();
+    $this->withHeaders($headers)->postJson('/api/max/webhook', realMaxMessage(42, 'бред', 100, 'mid.510'))->assertOk();
+
+    // редактор НЕ открыт...
+    Http::assertNotSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/messages') && str_contains($r->data()['text'] ?? '', 'Проверь распознанное'));
+
+    // повторный валидный ввод → редактор открыт (await_photo сохранён)
+    $this->withHeaders($headers)->postJson('/api/max/webhook', realMaxMessage(42, 'Аптеки 5', 100, 'mid.511'))->assertOk();
+
+    Http::assertSent(fn ($r) => $r->method() === 'POST' && str_contains($r->url(), '/messages') && str_contains($r->data()['text'] ?? '', 'Проверь распознанное'));
+});
+
+test('невалидная строка со спецсимволами экранируется в HTML-подсказке', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+
+    $headers = ['X-Max-Bot-API-Secret' => 'SECRET'];
+
+    $this->withHeaders($headers)->postJson('/api/max/webhook', realMaxCallback(42, 'card:'.$card->id, 100, 'cb_p4'))->assertOk();
+    // валидная + невалидная строка с угловыми скобками
+    $this->withHeaders($headers)->postJson('/api/max/webhook', realMaxMessage(42, "Аптеки 5\n<b>мусор", 100, 'mid.520'))->assertOk();
+
+    // невалидная строка экранирована в подсказке (HTML-entities, без сырых <>)
+    Http::assertSent(function ($r) {
+        if (! ($r->method() === 'POST' && str_contains($r->url(), '/messages'))) {
+            return false;
+        }
+        $t = $r->data()['text'] ?? '';
+
+        return str_contains($t, 'Не понял строки')
+            && str_contains($t, '&lt;b&gt;мусор');
     });
 });
