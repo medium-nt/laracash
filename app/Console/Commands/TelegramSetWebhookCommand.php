@@ -38,6 +38,14 @@ final class TelegramSetWebhookCommand extends Command
             return self::FAILURE;
         }
 
+        // Telegram требует secret_token 1–256 символов (ASCII), иначе setWebhook падает с непонятной ошибкой
+        $secretLen = strlen($secret);
+        if ($secretLen < 1 || $secretLen > 256) {
+            $this->error("TG_WEBHOOK_SECRET должен быть 1–256 символов (сейчас: {$secretLen}).");
+
+            return self::FAILURE;
+        }
+
         // Telegram требует https и не принимает localhost/локальные адреса.
         $webhookUrl = preg_replace('#^http://#i', 'https://', $appUrl).'/api/telegram/webhook';
 

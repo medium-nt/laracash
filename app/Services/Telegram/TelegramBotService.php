@@ -163,7 +163,14 @@ class TelegramBotService
 
         $contents = $fileResponse->body();
 
-        $local = 'temp/tg/'.uniqid('ph_', true).'.png';
+        // Валидация: это действительно картинка? (HTML-ошибка/corrupt ответ → не сохраняем мусор и не скармливаем GigaChat)
+        if (@imagecreatefromstring($contents) === false) {
+            return null;
+        }
+
+        // Расширение из file_path TG (обычно .jpg), дефолт — jpg
+        $ext = pathinfo((string) $filePath, PATHINFO_EXTENSION) ?: 'jpg';
+        $local = 'temp/tg/'.uniqid('ph_', true).'.'.$ext;
         Storage::disk('local')->put($local, $contents);
 
         return Storage::disk('local')->path($local);

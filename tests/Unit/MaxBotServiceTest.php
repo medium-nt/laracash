@@ -13,11 +13,13 @@ beforeEach(function () {
     config()->set('max.api_base', 'https://platform-api2.max.ru');
 });
 
-test('downloadPhoto сохраняет файл и возвращает путь', function () {
+test('downloadPhoto сохраняет JPEG-файл и возвращает путь', function () {
     Storage::fake('local');
 
+    // Валидный JPEG (magic bytes FF D8 FF) — конвертация не нужна, файл сохраняется as-is
+    $jpeg = "\xFF\xD8\xFF\xE0".str_repeat('x', 100);
     Http::fake([
-        'example.com/*' => Http::response('binarycontent', 200),
+        'example.com/*' => Http::response($jpeg, 200),
     ]);
 
     $path = (new MaxBotService)->downloadPhoto('https://example.com/img.jpg');
@@ -131,11 +133,22 @@ test('sendMessage шлёт header Authorization с токеном', function () 
 });
 
 test('caOptions отдаёт verify при заданном MAX_CACERT и пусто без него', function () {
-    $method = new ReflectionMethod(MaxBotService::class, 'caOptions');
-
     config()->set('max.cacert', null);
-    expect($method->invoke(new MaxBotService))->toBe([]);
+    expect(MaxBotService::caOptions())->toBe([]);
 
     config()->set('max.cacert', '/var/www/cacert.pem');
-    expect($method->invoke(new MaxBotService))->toBe(['verify' => '/var/www/cacert.pem']);
+    expect(MaxBotService::caOptions())->toBe(['verify' => '/var/www/cacert.pem']);
+});
+
+test('downloadPhoto возвращает null при не-картинке (битый WebP/HTML от CDN)', function () {
+    Storage::fake('local');
+
+    Http::fake([
+        'example.com/*' => Http::response('not an image', 200),
+    ]);
+
+    $path = (new MaxBotService)->downloadPhoto('https://example.com/bad.jpg');
+
+    // GD imagecreatefromstring провалится → null (не скармливаем битый файл GigaChat)
+    expect($path)->toBeNull();
 });

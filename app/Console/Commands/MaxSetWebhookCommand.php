@@ -41,11 +41,14 @@ final class MaxSetWebhookCommand extends Command
         $webhookUrl = preg_replace('#^http://#i', 'https://', $appUrl).'/api/max/webhook';
         $base = rtrim((string) config('max.api_base'), '/');
 
-        $resp = Http::timeout(15)->withHeaders(['Authorization' => $token])->post("{$base}/subscriptions", [
-            'url' => $webhookUrl,
-            'update_types' => ['message_created', 'message_callback', 'bot_started'],
-            'secret' => $secret,
-        ]);
+        $resp = Http::timeout(15)
+            ->withHeaders(['Authorization' => $token])
+            ->withOptions(\App\Services\Max\MaxBotService::caOptions())
+            ->post("{$base}/subscriptions", [
+                'url' => $webhookUrl,
+                'update_types' => ['message_created', 'message_callback', 'bot_started'],
+                'secret' => $secret,
+            ]);
 
         if (! $resp->successful()) {
             $this->error('subscriptions завершился ошибкой: '.$resp->body());

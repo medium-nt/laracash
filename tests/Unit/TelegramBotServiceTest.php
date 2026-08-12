@@ -8,12 +8,19 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)->use(RefreshDatabase::class)->in(__FILE__);
 
-test('downloadPhoto сохраняет файл и возвращает путь', function () {
+test('downloadPhoto сохраняет валидную картинку и возвращает путь', function () {
     Storage::fake('local');
+
+    // Генерируем валидный PNG через GD
+    $im = imagecreatetruecolor(10, 10);
+    ob_start();
+    imagepng($im);
+    $png = ob_get_clean();
+    imagedestroy($im);
 
     Http::fake([
         'api.telegram.org/bot*/getFile*' => Http::response(['ok' => true, 'result' => ['file_path' => 'photos/file.png']]),
-        'api.telegram.org/file/*' => Http::response('binarycontent', 200),
+        'api.telegram.org/file/*' => Http::response($png, 200),
     ]);
     config()->set('tg.token', 'TEST');
 
@@ -22,6 +29,22 @@ test('downloadPhoto сохраняет файл и возвращает путь
 
     expect($path)->not->toBeNull()
         ->and(str_contains($path, 'temp/tg'))->toBeTrue();
+});
+
+test('downloadPhoto возвращает null при не-картинке (мусор/HTML)', function () {
+    Storage::fake('local');
+
+    Http::fake([
+        'api.telegram.org/bot*/getFile*' => Http::response(['ok' => true, 'result' => ['file_path' => 'photos/file.png']]),
+        'api.telegram.org/file/*' => Http::response('not an image', 200),
+    ]);
+    config()->set('tg.token', 'TEST');
+
+    $bot = new TelegramBotService;
+    $path = $bot->downloadPhoto('FILE_ID');
+
+    // GD imagecreatefromstring провалится → null (не сохраняем мусор, не скармливаем GigaChat)
+    expect($path)->toBeNull();
 });
 
 test('sendMessage шлёт POST на sendMessage', function () {

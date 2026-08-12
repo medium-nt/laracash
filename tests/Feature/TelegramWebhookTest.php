@@ -47,8 +47,9 @@ test('webhook с верным секретом делегирует в conversat
 
     $this->withHeaders(['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'])
         ->postJson('/api/telegram/webhook', [
+            'update_id' => 100,
             'message' => [
-                'chat' => ['id' => 1],
+                'chat' => ['id' => 1, 'type' => 'private'],
                 'from' => ['id' => 42],
                 'text' => '/start',
             ],
@@ -90,9 +91,10 @@ test('webhook с верным секретом обрабатывает callback
 
     $this->withHeaders(['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'])
         ->postJson('/api/telegram/webhook', [
+            'update_id' => 101,
             'callback_query' => [
                 'id' => 'callback_id',
-                'message' => ['chat' => ['id' => 1]],
+                'message' => ['chat' => ['id' => 1, 'type' => 'private']],
                 'from' => ['id' => 42],
                 'data' => 'cmd:update',
             ],
@@ -113,7 +115,7 @@ test('webhook идемпотентен: повторный update_id не обр
 
     $payload = [
         'update_id' => 999,
-        'message' => ['chat' => ['id' => 1], 'from' => ['id' => 42], 'text' => '/start'],
+        'message' => ['chat' => ['id' => 1, 'type' => 'private'], 'from' => ['id' => 42], 'text' => '/start'],
     ];
 
     // Первый запрос — обрабатывается

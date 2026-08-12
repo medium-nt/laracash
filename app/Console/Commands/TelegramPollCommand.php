@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Services\Bot\BotConversationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Long-polling команда для получения обновлений от Telegram.
@@ -37,16 +38,28 @@ final class TelegramPollCommand extends Command
             try {
                 $resp = Http::timeout(35)->get("{$base}/getUpdates", ['offset' => $offset, 'timeout' => 30]);
 
+                // Non-2xx (429 rate-limit / 5xx) → backoff, иначе tight loop усугубляет 429
+                if (! $resp->successful()) {
+                    Log::warning('Telegram poll non-2xx: '.$resp->status());
+                    sleep(2);
+
+                    continue;
+                }
+
                 foreach ($resp->json('result', []) as $update) {
+                    // Сдвигаем offset ДО handle: упавший update «подтверждается» TG и не возвращается
+                    // (защита от ядовитых сообщений), но логируем пропуск для наблюдаемости.
                     $offset = $update['update_id'] + 1;
-                    $conv->handle($update);
+                    try {
+                        $conv->handle($update);
+                    } catch (\Throwable $e) {
+                        Log::error('Telegram handle error: '.$e->getMessage(), ['update_id' => $update['update_id'] ?? null]);
+                    }
                 }
             } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Telegram poll error: '.$e->getMessage());
+                Log::error('Telegram poll error: '.$e->getMessage());
                 sleep(1);
             }
         }
-
-        return Command::SUCCESS;
     }
 }

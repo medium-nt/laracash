@@ -43,15 +43,22 @@ final class MaxPollCommand extends Command
             try {
                 $resp = Http::timeout(35)
                     ->withHeaders(['Authorization' => $token])
+                    ->withOptions(\App\Services\Max\MaxBotService::caOptions())
                     ->get("{$base}/updates", ['marker' => $marker, 'timeout' => 30]);
 
                 $data = $resp->json() ?? [];
 
+                // Каждый update в своём try/catch: один упавший не должен блокировать movement marker
+                // (иначе MAX вернёт ту же пачку → бесконечный переопрос и заливка логов).
                 foreach ($data['updates'] ?? [] as $update) {
-                    $conv->handle($update);
+                    try {
+                        $conv->handle($update);
+                    } catch (\Throwable $e) {
+                        Log::error('MAX handle error: '.$e->getMessage(), ['update_type' => $update['update_type'] ?? null]);
+                    }
                 }
 
-                // Подтверждаем прочтение: marker из ответа → в следующий запрос.
+                // Подтверждаем прочтение всей пачки, даже если часть упала на стороне приложения.
                 // Дока MAX: «after you pass marker, all previous updates are considered read».
                 if (isset($data['marker'])) {
                     $marker = $data['marker'];
@@ -61,7 +68,5 @@ final class MaxPollCommand extends Command
                 sleep(1);
             }
         }
-
-        return Command::SUCCESS;
     }
 }

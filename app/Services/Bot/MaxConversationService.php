@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\User;
 use App\Services\Max\MaxBotService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -57,7 +58,6 @@ class MaxConversationService
             ?? $msg['sender']['user_id']              // message_created — автор сообщения
             ?? $update['user']['user_id']             // bot_started / топ-уровень
             ?? $update['from']['user_id']
-            ?? $update['chat_id']
             ?? ''
         );
 
@@ -74,7 +74,8 @@ class MaxConversationService
         }
 
         // Блокировка по maxId: двойной тап / ретрай доставки не должен дать гонку.
-        $lock = Cache::lock("bot.lock.max.{$maxId}", 30);
+        // TTL 60с: downloadPhoto (15с) + GigaChat recognize (до 15с) + sendMessage — должно влезть
+        $lock = Cache::lock("bot.lock.max.{$maxId}", 60);
         if (! $lock->get()) {
             return;
         }
@@ -204,7 +205,7 @@ class MaxConversationService
             ['type' => 'callback', 'text' => 'Обновить кешбэк', 'payload' => 'cmd:update'],
         ]];
 
-        $this->sendTransient((string) $user->max_id, $chatId, "Привет, {$user->name}! Карт: {$count}.", $keyboard);
+        $this->sendTransient((string) $user->max_id, $chatId, 'Привет, '.e($user->name)."! Карт: {$count}.", $keyboard);
         $this->setStateName((string) $user->max_id, 'idle');
     }
 
@@ -251,7 +252,9 @@ class MaxConversationService
     {
         // РЕАЛЬНЫЙ формат MAX: callback_id и payload лежат внутри update.callback.*
         $cb = $update['callback'] ?? [];
-        $this->bot->answerCallback($cb['callback_id'] ?? '');
+        if (! empty($cb['callback_id'])) {
+            $this->bot->answerCallback($cb['callback_id']);
+        }
 
         $data = $cb['payload'] ?? '';
 
@@ -340,13 +343,14 @@ class MaxConversationService
 
         // Rate-limit: каждое фото = платный запрос к GigaChat, ≤5/мин
         $rlKey = "bot.rl.photo.max.{$user->max_id}";
-        if ((int) Cache::get($rlKey, 0) >= 5) {
+        $count = (int) Cache::get($rlKey, 0);
+        if ($count >= 5) {
             // ⚠️ MAX: фото пользователя НЕ удаляем
             $this->sendTransient((string) $user->max_id, $chatId, 'Слишком много скринов за минуту. Подожди немного.');
 
             return;
         }
-        Cache::put($rlKey, (int) Cache::get($rlKey, 0) + 1, 60);
+        Cache::put($rlKey, $count + 1, 60);
 
         $path = $this->bot->downloadPhoto($photoUrl);
 
@@ -457,21 +461,24 @@ class MaxConversationService
                 return;
             }
 
-            // replace: сначала удаляем все существующие категории карты
-            if ($action === 'replace') {
-                \App\Models\Cashback::where('card_id', $cardId)->delete();
-            }
-
-            // Сохраняем изображение в карту
-            if (isset($state['image'])) {
-                if (! empty($card->cashback_image) && $card->cashback_image !== $state['image']) {
-                    Storage::disk('public')->delete('card_cashback_image/'.$card->cashback_image);
+            // Атомарно: удаление старых категорий (replace) + image + apply. Если apply упадёт,
+            // БД откатится — не останемся с «голой» картой (старое стёрто, новое не записано).
+            $applyResult = DB::transaction(function () use ($action, $cardId, $card, $state, $user, $raw) {
+                if ($action === 'replace') {
+                    \App\Models\Cashback::where('card_id', $cardId)->delete();
                 }
-                $card->cashback_image = $state['image'];
-                $card->save();
-            }
 
-            $applyResult = $this->import->apply($user->id, $cardId, $raw);
+                // Сохраняем изображение в карту
+                if (isset($state['image'])) {
+                    if (! empty($card->cashback_image) && $card->cashback_image !== $state['image']) {
+                        Storage::disk('public')->delete('card_cashback_image/'.$card->cashback_image);
+                    }
+                    $card->cashback_image = $state['image'];
+                    $card->save();
+                }
+
+                return $this->import->apply($user->id, $cardId, $raw);
+            });
             $created = $applyResult['created'] ?? [];
 
             // Cleanup: удаляем редактор (СВОЁ сообщение). Скрин юзера не трогаем (MAX).
@@ -573,7 +580,7 @@ class MaxConversationService
         $title = trim($matches[1]);
         $percent = (float) str_replace(',', '.', $matches[2]);
 
-        if ($title === '' || $percent <= 0) {
+        if ($title === '' || $percent <= 0 || $percent > 100) {
             return null;
         }
 

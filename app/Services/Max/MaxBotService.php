@@ -38,9 +38,12 @@ class MaxBotService
      * Mozilla bundle + Russian root), верифицируем по нему. Локально конфиг пуст → опция
      * не передаётся (используется системный cacert из php.ini).
      *
+     * Static + public: переиспользуется в консольных командах (max:setwebhook/max:poll),
+     * которые шлют Http напрямую, минуя сервис.
+     *
      * @return array Опции для Http::withOptions() (['verify' => путь] или [])
      */
-    private function caOptions(): array
+    public static function caOptions(): array
     {
         $cacert = config('max.cacert');
 
@@ -54,7 +57,7 @@ class MaxBotService
     {
         return Http::timeout(15)
             ->withHeaders(['Authorization' => (string) config('max.token')])
-            ->withOptions($this->caOptions());
+            ->withOptions(self::caOptions());
     }
 
     /**
@@ -210,10 +213,15 @@ class MaxBotService
         // Не JPEG (WebP/PNG/...) → конвертируем в JPEG, иначе GigaChat отвергнет файл.
         if (! str_starts_with($contents, "\xFF\xD8\xFF")) {
             $image = @imagecreatefromstring($contents);
-            if ($image !== false) {
-                imagejpeg($image, $path, 90);
-                imagedestroy($image);
+            // Битый WebP / не-картинка (HTML-ошибка CDN) → не скармливать GigaChat и не хранить битый файл.
+            if ($image === false) {
+                Log::warning('MAX downloadPhoto: imagecreatefromstring failed (битый WebP/не картинка)');
+                Storage::disk('local')->delete($local);
+
+                return null;
             }
+            imagejpeg($image, $path, 90);
+            imagedestroy($image);
         }
 
         return $path;

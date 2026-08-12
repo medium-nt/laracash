@@ -37,8 +37,11 @@ class MaxWebhookController extends Controller
         $update = $request->json()->all();
 
         // Идемпотентность: MAX ретраит доставку при медленном ответе (GigaChat может тормозить).
-        // Дедуп по callback_id (для нажатий кнопок) или message_id (для сообщений), TTL 600 c.
-        $id = $update['callback_id'] ?? $update['message']['message_id'] ?? $update['timestamp'] ?? null;
+        // Дедуп по callback.callback_id (нажатия кнопок) или message.body.mid (сообщения), TTL 600 c.
+        $id = $update['callback']['callback_id']
+            ?? $update['message']['body']['mid']
+            ?? $update['timestamp']
+            ?? null;
         if ($id !== null && ! Cache::add("bot.update.max.{$id}", true, 600)) {
             return response('OK', 200);
         }

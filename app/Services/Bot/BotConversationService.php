@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Models\User;
 use App\Services\Telegram\TelegramBotService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class BotConversationService
@@ -36,6 +37,15 @@ class BotConversationService
             return;
         }
 
+        // Игнорируем групповые чаты: бот — личный ассистент кешбэка. Ответ в группу = спам
+        // и утечка telegram_id участников в общий чат.
+        $chatType = $update['message']['chat']['type']
+            ?? $update['callback_query']['message']['chat']['type']
+            ?? null;
+        if ($chatType !== null && $chatType !== 'private') {
+            return;
+        }
+
         // 2. Ищем пользователя по telegram_id
         $user = User::where('telegram_id', $tgId)->first();
         if ($user === null) {
@@ -48,7 +58,8 @@ class BotConversationService
         // 3. Перенаправляем в обработчик callback или message под блокировкой по tgId,
         // чтобы двойной тап / ретрай доставки не дал гонку (дубль apply, дубль категорий).
         // Неблокирующе: если lock занят — значит уже обрабатывается, пропускаем апдейт.
-        $lock = Cache::lock("bot.lock.{$tgId}", 30);
+        // TTL 60с: downloadPhoto + GigaChat recognize (до 15–40с) + sendMessage — должно влезть
+        $lock = Cache::lock("bot.lock.{$tgId}", 60);
         if (! $lock->get()) {
             return;
         }
@@ -85,7 +96,8 @@ class BotConversationService
         $state = $this->state($user->telegram_id);
 
         // 4. Обработка команд и состояний
-        if ($text === '/start' || $text === '/menu') {
+        // /start и /start <payload> (deep-link из кнопки «Привязать Telegram» шлёт «/start link»)
+        if ($text === '/start' || str_starts_with($text, '/start ') || $text === '/menu') {
             $this->sendMenu($chatId, $user);
 
             return;
@@ -107,6 +119,13 @@ class BotConversationService
         if (isset($message['photo'])) {
             $this->deleteUserMessage($chatId, $message);
             $this->sendTransient((string) $user->telegram_id, $chatId, 'Сначала выбери карту (Обновить кешбэк), затем пришли скриншот.');
+
+            return;
+        }
+
+        // Скрин прислан как файл (document), а не как изображение — не сможем распознать
+        if (isset($message['document'])) {
+            $this->sendTransient((string) $user->telegram_id, $chatId, 'Пришли скрин как изображение, а не как файл — тогда я смогу его распознать.');
 
             return;
         }
@@ -162,7 +181,7 @@ class BotConversationService
             ['text' => 'Обновить кешбэк', 'callback_data' => 'cmd:update'],
         ]];
 
-        $this->sendTransient((string) $user->telegram_id, $chatId, "Привет, {$user->name}! Карт: {$count}.", $keyboard);
+        $this->sendTransient((string) $user->telegram_id, $chatId, 'Привет, '.e($user->name)."! Карт: {$count}.", $keyboard);
         $this->setStateName((string) $user->telegram_id, 'idle');
     }
 
@@ -206,8 +225,10 @@ class BotConversationService
      */
     private function handleCallback(array $cb, int|string $chatId, User $user): void
     {
-        // 7. Снимаем "часики" с кнопки
-        $this->bot->answerCallback($cb['id']);
+        // 7. Снимаем "часики" с кнопки (только если есть callback id — иначе мусорный запрос в TG)
+        if (! empty($cb['id'])) {
+            $this->bot->answerCallback($cb['id']);
+        }
 
         $data = $cb['data'] ?? '';
 
@@ -296,13 +317,14 @@ class BotConversationService
 
         // Rate-limit: защита от спама фото (каждое = платный запрос к GigaChat), ≤5/мин
         $rlKey = "bot.rl.photo.{$user->telegram_id}";
-        if ((int) Cache::get($rlKey, 0) >= 5) {
+        $count = (int) Cache::get($rlKey, 0);
+        if ($count >= 5) {
             $this->deleteUserMessage($chatId, $message);
             $this->sendTransient((string) $user->telegram_id, $chatId, 'Слишком много скринов за минуту. Подожди немного.');
 
             return;
         }
-        Cache::put($rlKey, (int) Cache::get($rlKey, 0) + 1, 60);
+        Cache::put($rlKey, $count + 1, 60);
 
         // 8. Берём самое крупное фото
         $photo = end($message['photo']);
@@ -344,6 +366,15 @@ class BotConversationService
                 'percent' => (float) ($skip['percent'] ?? 0),
                 'category_id' => null,
             ];
+        }
+
+        // AI ничего не распознал → не открываем пустой редактор, объясняем причину
+        if (empty($items)) {
+            Storage::disk('public')->delete('card_cashback_image/'.$imageFilename);
+            $this->sendTransient((string) $user->telegram_id, $chatId, 'Не удалось распознать категории на скрине. Попробуй другое фото или /menu.');
+            $this->setStateName((string) $user->telegram_id, 'await_photo', ['card_id' => $cardId]);
+
+            return;
         }
 
         // Cleanup: удаляем транзитный промпт «Пришли скриншот».
@@ -425,22 +456,25 @@ class BotConversationService
                 return;
             }
 
-            // Для режима replace: сначала удаляем все существующие категории карты
-            if ($action === 'replace') {
-                \App\Models\Cashback::where('card_id', $cardId)->delete();
-            }
-
-            // Сохраняем изображение в карту
-            if (isset($state['image'])) {
-                if (! empty($card->cashback_image) && $card->cashback_image !== $state['image']) {
-                    Storage::disk('public')->delete('card_cashback_image/'.$card->cashback_image);
+            // Атомарно: удаление старых категорий (replace) + image + apply. Если apply упадёт,
+            // БД откатится — не останемся с «голой» картой (старое стёрто, новое не записано).
+            $applyResult = DB::transaction(function () use ($action, $cardId, $card, $state, $user, $raw) {
+                if ($action === 'replace') {
+                    \App\Models\Cashback::where('card_id', $cardId)->delete();
                 }
-                $card->cashback_image = $state['image'];
-                $card->save();
-            }
 
-            // Применяем кешбэк (создаёт недостающие категории, возвращает список созданных)
-            $applyResult = $this->import->apply($user->id, $cardId, $raw);
+                // Сохраняем изображение в карту
+                if (isset($state['image'])) {
+                    if (! empty($card->cashback_image) && $card->cashback_image !== $state['image']) {
+                        Storage::disk('public')->delete('card_cashback_image/'.$card->cashback_image);
+                    }
+                    $card->cashback_image = $state['image'];
+                    $card->save();
+                }
+
+                // Применяем кешбэк (создаёт недостающие категории, возвращает список созданных)
+                return $this->import->apply($user->id, $cardId, $raw);
+            });
             $created = $applyResult['created'] ?? [];
 
             // Cleanup: удаляем редактор и скрин, оставляя только результат
@@ -552,7 +586,7 @@ class BotConversationService
         $title = trim($matches[1]);
         $percent = (float) str_replace(',', '.', $matches[2]);
 
-        if ($title === '' || $percent <= 0) {
+        if ($title === '' || $percent <= 0 || $percent > 100) {
             return null;
         }
 
