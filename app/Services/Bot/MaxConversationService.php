@@ -67,8 +67,17 @@ class MaxConversationService
 
         $user = User::where('max_id', $maxId)->first();
         if ($user === null) {
+            // Снимаем «часики» с callback-кнопки (напр. «Проверить»), иначе она висит до таймаута
+            $cbId = $update['callback']['callback_id'] ?? null;
+            if ($cbId !== null) {
+                $this->bot->answerCallback($cbId);
+            }
+
             $url = config('app.url').'/profile/max-link?max='.$maxId;
-            $this->bot->sendMessage($chatId, 'Сначала привяжи аккаунт '.config('app.name').": {$url}");
+            $keyboard = [[
+                ['type' => 'callback', 'text' => 'Проверить', 'payload' => 'cmd:recheck'],
+            ]];
+            $this->bot->sendMessage($chatId, 'Сначала привяжи аккаунт '.config('app.name').": {$url}", $keyboard);
 
             return;
         }
@@ -264,17 +273,27 @@ class MaxConversationService
             return;
         }
 
+        // «Проверить» на сообщении о привязке: если юзер уже привязался в ЛК,
+        // верхний lookup в handle() найдёт его и попадёт сюда — пускаем в бот.
+        if ($data === 'cmd:recheck') {
+            $this->sendMenu($chatId, $user);
+
+            return;
+        }
+
         if (str_starts_with($data, 'card:')) {
             $cardId = (int) substr($data, 5);
 
             // Проверяем, что карта принадлежит пользователю (user-scoping)
-            if (! Card::where('id', $cardId)->where('user_id', $user->id)->exists()) {
+            $card = Card::where('id', $cardId)->where('user_id', $user->id)->first();
+            if ($card === null) {
                 $this->bot->sendMessage($chatId, 'Карта не найдена.');
 
                 return;
             }
 
-            $this->sendTransient((string) $user->max_id, $chatId, 'Пришли скриншот категорий кешбэка.');
+            $label = e(($card->bank?->title ?? 'Без банка').' '.$card->number);
+            $this->sendTransient((string) $user->max_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label}.");
             $this->setStateName((string) $user->max_id, 'await_photo', ['card_id' => $cardId]);
 
             return;

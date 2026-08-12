@@ -49,8 +49,17 @@ class BotConversationService
         // 2. Ищем пользователя по telegram_id
         $user = User::where('telegram_id', $tgId)->first();
         if ($user === null) {
+            // Снимаем «часики» с callback-кнопки (напр. «Проверить»), иначе она висит до таймаута
+            $cbId = $update['callback_query']['id'] ?? null;
+            if ($cbId !== null) {
+                $this->bot->answerCallback($cbId);
+            }
+
             $url = config('app.url').'/profile/bot-link?tg='.$tgId;
-            $this->bot->sendMessage($chatId, 'Сначала привяжи аккаунт '.config('app.name').": {$url}");
+            $keyboard = [[
+                ['text' => 'Проверить', 'callback_data' => 'cmd:recheck'],
+            ]];
+            $this->bot->sendMessage($chatId, 'Сначала привяжи аккаунт '.config('app.name').": {$url}", $keyboard);
 
             return;
         }
@@ -238,17 +247,27 @@ class BotConversationService
             return;
         }
 
+        // «Проверить» на сообщении о привязке: если юзер уже привязался в ЛК,
+        // верхний lookup в handle() найдёт его и попадёт сюда — пускаем в бот.
+        if ($data === 'cmd:recheck') {
+            $this->sendMenu($chatId, $user);
+
+            return;
+        }
+
         if (str_starts_with($data, 'card:')) {
             $cardId = (int) substr($data, 5);
 
             // Проверяем, что карта принадлежит пользователю (user-scoping)
-            if (! Card::where('id', $cardId)->where('user_id', $user->id)->exists()) {
+            $card = Card::where('id', $cardId)->where('user_id', $user->id)->first();
+            if ($card === null) {
                 $this->bot->sendMessage($chatId, 'Карта не найдена.');
 
                 return;
             }
 
-            $this->sendTransient((string) $user->telegram_id, $chatId, 'Пришли скриншот категорий кешбэка.');
+            $label = e(($card->bank?->title ?? 'Без банка').' '.$card->number);
+            $this->sendTransient((string) $user->telegram_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label}.");
             $this->setStateName((string) $user->telegram_id, 'await_photo', ['card_id' => $cardId]);
 
             return;

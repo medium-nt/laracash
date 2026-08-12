@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Bank;
+use App\Models\Card;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -98,4 +100,88 @@ test('webhook идемпотентен: повторный callback_id не об
         ->count();
 
     expect($count)->toBe(1);
+});
+
+test('непривязанный пользователь получает сообщение о привязке с кнопкой Проверить', function () {
+    // max_id 999 не привязан ни к одному юзеру
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxMessage(999, '/start'))
+        ->assertOk();
+
+    // POST /messages содержит текст привязки и inline-кнопку «Проверить» (cmd:recheck)
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'привяжи аккаунт')
+            && str_contains(json_encode($data['attachments'] ?? []), 'cmd:recheck');
+    });
+});
+
+test('callback cmd:recheck от привязанного пользователя открывает меню', function () {
+    User::factory()->create(['max_id' => '42']);
+
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxCallback(42, 'cmd:recheck'))
+        ->assertOk();
+
+    // sendMenu → сообщение-меню «Привет, … Карт: N.»
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Привет')
+            && str_contains($data['text'] ?? '', 'Карт:');
+    });
+});
+
+test('выбор карты предлагает скриншот с указанием банка и номера карты', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create([
+        'user_id' => $user->id,
+        'bank_id' => $bank->id,
+        'number' => '5469 5678',
+        'color' => 'dark',
+    ]);
+
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxCallback(42, 'card:'.$card->id))
+        ->assertOk();
+
+    // Текст ожидания скрина содержит «по карте», название банка и номер
+    Http::assertSent(function ($request) use ($bank, $card) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'по карте')
+            && str_contains($data['text'] ?? '', $bank->title)
+            && str_contains($data['text'] ?? '', $card->number);
+    });
+});
+
+test('callback cmd:recheck от НЕпривязанного повторяет сообщение о привязке и снимает спиннер', function () {
+    // max_id 999 не привязан — жмёт «Проверить» под bind-сообщением
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxCallback(999, 'cmd:recheck'))
+        ->assertOk();
+
+    // POST /answers вызван — крутилка с кнопки снята
+    Http::assertSent(fn ($request) => str_contains($request->url(), '/answers'));
+    // и повторно отправлено bind-сообщение с кнопкой «Проверить»
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'привяжи аккаунт')
+            && str_contains(json_encode($data['attachments'] ?? []), 'cmd:recheck');
+    });
 });
