@@ -5,7 +5,9 @@ namespace App\Services\Bot;
 use App\Models\Card;
 use App\Models\Category;
 use App\Models\User;
+use App\Services\CategoryMatcher;
 use App\Services\Telegram\TelegramBotService;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -169,13 +171,13 @@ class BotConversationService
             $parsed = self::parseItem($text);
 
             if ($parsed === null) {
-                $this->sendTransient((string) $user->telegram_id, $chatId, 'Не понял формат. Пришли «название процент», напр. `Аптеки 5`');
+                $this->sendTransient((string) $user->telegram_id, $chatId, "Не понял формат. Пришли «название процент»:\n• Аптеки 5\n• +Кафе 5 (новая категория)");
 
                 return;
             }
 
             // Резолвим category_id: ✅ если категория есть, иначе 🆕 (будет создана при сохранении)
-            $parsed['category_id'] = $this->resolveCategoryId($user->id, $parsed['title']);
+            $parsed = $this->attachCategory($parsed, $this->userCategories($user->id));
 
             // Применяем правку к items
             $items = $state['items'] ?? [];
@@ -298,7 +300,7 @@ class BotConversationService
             }
 
             $label = e(($card->bank?->title ?? 'Без банка').' '.$card->number);
-            $this->sendTransient((string) $user->telegram_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label} ИЛИ введи их текстом — по одной в строке в формате «Категория процент», можно дописать примечание через пробел (напр.: Аптеки 5 / Кафе 3,5 / Аптеки 5 только 03).");
+            $this->sendTransient((string) $user->telegram_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label} 📸\nИли введи их текстом — по одной в строке «Категория процент».\n\nПримеры:\n• Аптеки 5\n• Кафе 3,5\n• Аптеки 5 только 03\n\nНужна отдельная категория, хотя похожая уже есть? Начни строку с «+»:\n• +Кафе 5");
             $this->setStateName((string) $user->telegram_id, 'await_photo', ['card_id' => $cardId]);
 
             return;
@@ -320,7 +322,7 @@ class BotConversationService
         // Обработка кнопок редактора
         if (str_starts_with($data, 'edit:')) {
             $index = (int) substr($data, 5);
-            $this->sendTransient((string) $user->telegram_id, $chatId, 'Пришли «название процент», можно дописать примечание через пробел. Напр.: Аптеки 5 или Аптеки 5 только 03');
+            $this->sendTransient((string) $user->telegram_id, $chatId, "Пришли «название процент» — можно дописать примечание через пробел.\n\nПримеры:\n• Аптеки 5\n• Аптеки 5 только 03\n• +Кафе 5 (отдельная категория)");
             $this->setStateName((string) $user->telegram_id, 'await_edit', ['index' => $index]);
 
             return;
@@ -353,7 +355,7 @@ class BotConversationService
         }
 
         if ($data === 'add') {
-            $this->sendTransient((string) $user->telegram_id, $chatId, 'Пришли «название процент», можно дописать примечание через пробел. Напр.: Кафе 3.5 или Аптеки 5 только 03');
+            $this->sendTransient((string) $user->telegram_id, $chatId, "Пришли «название процент» — можно дописать примечание через пробел.\n\nПримеры:\n• Кафе 3.5\n• Аптеки 5 только 03\n• +Кафе 5 (отдельная категория)");
             $this->setStateName((string) $user->telegram_id, 'await_add');
 
             return;
@@ -487,6 +489,9 @@ class BotConversationService
 
         $items = [];
         $invalid = [];
+        // Категории пользователя грузятся ОДИН раз — attachCategory работает по коллекции,
+        // иначе был N+1 SELECT на каждую строку списка.
+        $categories = $this->userCategories($user->id);
         foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
             $line = trim($line);
             if ($line === '') {
@@ -498,13 +503,13 @@ class BotConversationService
 
                 continue;
             }
-            $parsed['category_id'] = $this->resolveCategoryId($user->id, $parsed['title']);
+            $parsed = $this->attachCategory($parsed, $categories);
             $items[] = $parsed;
         }
 
         // Ничего не распознали — не открываем пустой редактор, подсказываем формат
         if (empty($items)) {
-            $this->sendTransient((string) $user->telegram_id, $chatId, 'Не получилось распознать категории. Формат — по одной в строке: «Категория процент» (напр.: Аптеки 5 / Кафе 3,5).');
+            $this->sendTransient((string) $user->telegram_id, $chatId, "Не получилось распознать категории.\n\nФормат — по одной в строке «Категория процент». Примеры:\n• Аптеки 5\n• Кафе 3,5\n• +Кафе 5 (отдельная категория)");
 
             return;
         }
@@ -647,10 +652,15 @@ class BotConversationService
     private function buildEditorText(array $items): string
     {
         if (empty($items)) {
-            return "Проверь распознанное (✅ — ваша категория, 🆕 — новая, будет создана):\n\nСписок пуст. Нажми «➕ Добавить категорию».";
+            return 'Список пуст. Нажми «➕ Добавить категорию».';
         }
 
-        $lines = ['Проверь распознанное (✅ — ваша, 🆕 — новая):'];
+        // Дубли: одинаковый category_id (не null) у нескольких пунктов — при сохранении
+        // останется только последний (last-wins в apply). Подсвечиваем ⚠️, чтобы потеря не была тихой.
+        $counts = array_count_values(array_filter(array_map(fn ($it) => $it['category_id'] ?? null, $items)));
+        $dupIds = array_keys(array_filter($counts, fn ($n) => $n > 1));
+
+        $lines = ['Проверь распознанное:'];
         foreach ($items as $i => $item) {
             $mark = empty($item['category_id']) ? '🆕' : '✅';
             // e() обязательно: title/mcc из AI/ручного ввода, parse_mode=HTML — без экранирования
@@ -660,7 +670,25 @@ class BotConversationService
             if (! empty($item['mcc'])) {
                 $line .= ' · 📝 '.e($item['mcc']);
             }
+            if (in_array($item['category_id'] ?? null, $dupIds, true)) {
+                $line .= ' ⚠️';
+            }
             $lines[] = $line;
+        }
+
+        // Легенда внизу: ✅/🆕 — при наличии новой категории; ⚠️ — при наличии дублей category_id
+        $hasNew = false;
+        foreach ($items as $item) {
+            if (empty($item['category_id'])) {
+                $hasNew = true;
+                break;
+            }
+        }
+        if ($hasNew) {
+            $lines[] = '✅ — ваша категория, 🆕 — новая, будет создана';
+        }
+        if (! empty($dupIds)) {
+            $lines[] = '⚠️ — дублирующая категория, при сохранении останется последняя';
         }
 
         // Пустая строка между пунктами — визуальное разделение, чтобы список не сливался
@@ -715,13 +743,25 @@ class BotConversationService
      * Парсит текст пользователя для извлечения названия и процента.
      *
      * @param  string  $text  Текст от пользователя (напр. «Аптеки 5», «Кафе и рестораны 3.5» или «Аптеки 5 только 03»)
-     * @return array|null Массив ['title'=>string, 'percent'=>float, 'mcc'=>string] (mcc='' если примечания нет) или null
+     * @return array|null Массив ['title'=>string,'percent'=>float,'mcc'=>string,'force_new'=>bool] (mcc='', force_new=false по умолчанию) или null
      */
     public static function parseItem(string $text): ?array
     {
         $text = trim($text);
         if ($text === '') {
             return null;
+        }
+
+        // Префикс «+» → принудительно новая категория: fuzzy-мэтчинг пропускается,
+        // точное совпадение (если есть) переиспользуется. Пр.: «+Кафе 5» при наличии
+        // «Кафе и рестораны» создаст отдельную «Кафе», не подменяя её.
+        $forceNew = false;
+        if (str_starts_with($text, '+')) {
+            $forceNew = true;
+            $text = ltrim(mb_substr($text, 1));
+            if ($text === '') {
+                return null;
+            }
         }
 
         // Формат: «название — пробел — процент (число, опц. %) — пробел — примечание».
@@ -741,7 +781,7 @@ class BotConversationService
             return null;
         }
 
-        return ['title' => $title, 'percent' => $percent, 'mcc' => $mcc];
+        return ['title' => $title, 'percent' => $percent, 'mcc' => $mcc, 'force_new' => $forceNew];
     }
 
     /**
@@ -868,31 +908,48 @@ class BotConversationService
     }
 
     /**
-     * Находит id существующей категории пользователя по точному совпадению названия
-     * (нормализованное: регистр/пробелы игнорируются). null — категория новая.
+     * Сопоставляет введённое название с категориями пользователя (fuzzy через
+     * CategoryMatcher) и проставляет category_id. При совпадении title заменяется
+     * на каноничный — это чинит точный apply-путь (ensureCategories) и показ в
+     * редакторе (✅ с честным названием). mcc/percent не затрагиваются.
      *
-     * @param  int  $userId  ID пользователя
-     * @param  string  $title  Введённое название
-     * @return int|null ID категории или null
+     * @param  array  $parsed  Распарсенный пункт ['title'=>…,'percent'=>…,'mcc'=>…,'force_new'=>bool]
+     * @param  Collection<int, Category>  $categories  Категории пользователя (загружает вызывающая сторона).
+     * @return array Тот же пункт с дополненным 'category_id' и каноничным 'title'
      */
-    private function resolveCategoryId(int $userId, string $title): ?int
+    private function attachCategory(array $parsed, Collection $categories): array
     {
-        $norm = self::normTitle($title);
+        $matcher = new CategoryMatcher;
 
-        $category = Category::query()
-            ->where('user_id', $userId)
-            ->get(['id', 'title'])
-            ->first(fn ($c) => self::normTitle($c->title) === $norm);
+        // force_new (маркер «+») → только точное совпадение, без fuzzy-подмены названия.
+        $matched = ! empty($parsed['force_new'])
+            ? $matcher->matchExact($parsed['title'], $categories)
+            : $matcher->match($parsed['title'], $categories);
 
-        return $category?->id;
+        if ($matched !== null) {
+            $parsed['category_id'] = $matched->id;
+            $parsed['title'] = $matched->title;
+        } else {
+            $parsed['category_id'] = null;
+        }
+
+        return $parsed;
     }
 
     /**
-     * Нормализует название: нижний регистр + схлопывание пробелов + trim.
+     * Категории пользователя для мэтчинга — один SELECT.
+     *
+     * Вынесено отдельно, чтобы processTextList грузил коллекцию один раз (а не
+     * на каждую строку списка) и передавал в attachCategory.
+     *
+     * @return Collection<int, Category>
      */
-    private static function normTitle(string $title): string
+    private function userCategories(int $userId): Collection
     {
-        return preg_replace('/\s+/u', ' ', mb_strtolower(trim($title)));
+        return Category::query()
+            ->where('user_id', $userId)
+            ->orderBy('title')
+            ->get(['id', 'title', 'keywords']);
     }
 
     /**

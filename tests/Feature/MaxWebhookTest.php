@@ -338,3 +338,126 @@ test('невалидная строка со спецсимволами экра
             && str_contains($t, '&lt;b&gt;мусор');
     });
 });
+
+// ============ Fuzzy-сопоставление категорий (текстовый ввод) ============
+
+test('fuzzy: «Кафе» резолвится в существующую «Кафе и рестораны» без создания дубля', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Кафе и рестораны', 'keywords' => '']);
+
+    maxSendTextList(42, $card->id, 'Кафе 5');
+
+    // Редактор показал КАНОНИЧНОЕ название (✅), а не введённое «Кафе» как новое
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', 'Проверь распознанное')
+            && str_contains($data['text'] ?? '', 'Кафе и рестораны');
+    });
+
+    // Сохранить (merge) → apply
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxCallback(42, 'merge', 100, 'cb_merge_fuzzy'))
+        ->assertOk();
+
+    // Новая категория НЕ создана — осталась одна «Кафе и рестораны»
+    expect(Category::where('user_id', $user->id)->count())->toBe(1);
+    expect(Cashback::where('card_id', $card->id)->count())->toBe(1);
+});
+
+test('force_new: «+Кафе 5» создаёт отдельную «Кафе» рядом с «Кафе и рестораны»', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Кафе и рестораны', 'keywords' => '']);
+
+    maxSendTextList(42, $card->id, '+Кафе 5');
+
+    // Редактор показал отдельную «Кафе» (🆕), НЕ подменив на «Кафе и рестораны»
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $text = $request->data()['text'] ?? '';
+
+        return str_contains($text, 'Проверь распознанное')
+            && str_contains($text, 'Кафе')
+            && ! str_contains($text, 'Кафе и рестораны');
+    });
+
+    // Сохранить (merge) → apply
+    $this->withHeaders(['X-Max-Bot-API-Secret' => 'SECRET'])
+        ->postJson('/api/max/webhook', realMaxCallback(42, 'merge', 100, 'cb_merge_force'))
+        ->assertOk();
+
+    // Теперь ОБЕ категории: «Кафе и рестораны» + созданная «Кафе»
+    expect(Category::where('user_id', $user->id)->count())->toBe(2)
+        ->and(Category::where('user_id', $user->id)->where('title', 'Кафе')->exists())->toBeTrue()
+        ->and(Cashback::where('card_id', $card->id)->count())->toBe(1);
+});
+
+test('buildEditorText: легенда ✅/🆕 НЕ выводится, когда все категории свои', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
+
+    // Только существующая категория (✅) — легенды быть НЕ должно
+    maxSendTextList(42, $card->id, 'Аптеки 5');
+
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $text = $request->data()['text'] ?? '';
+
+        return str_contains($text, 'Проверь распознанное')
+            && ! str_contains($text, 'ваша категория');
+    });
+});
+
+test('buildEditorText: легенда ✅/🆕 выводится внизу при наличии новой категории', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
+
+    // Смешанный список: ✅ Аптеки + 🆕 Такси — легенда есть и идёт последней строкой
+    maxSendTextList(42, $card->id, "Аптеки 5\nТакси 3");
+
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $text = $request->data()['text'] ?? '';
+
+        return str_contains($text, 'Проверь распознанное')
+            && str_ends_with($text, '✅ — ваша категория, 🆕 — новая, будет создана');
+    });
+});
+
+test('buildEditorText: дублирующая категория (один category_id у двух пунктов) помечается ⚠️', function () {
+    $user = User::factory()->create(['max_id' => '42']);
+    $bank = Bank::create(['title' => 'Сбер', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '5469 5678', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
+
+    // «Аптека» (подстрока→Аптеки) и «Аптеки» (exact→Аптеки) — обе канонизируются в один category_id
+    maxSendTextList(42, $card->id, "Аптека 5\nАптеки 7");
+
+    Http::assertSent(function ($request) {
+        if (! ($request->method() === 'POST' && str_contains($request->url(), '/messages'))) {
+            return false;
+        }
+        $text = $request->data()['text'] ?? '';
+
+        return str_contains($text, 'Проверь распознанное')
+            && str_contains($text, '⚠️')
+            && str_contains($text, 'дублирующая категория');
+    });
+});

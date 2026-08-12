@@ -167,8 +167,10 @@ test('callback cancel возвращает в idle', function () {
 });
 
 test('parseItem парсит название с пробелами и процент', function () {
-    expect(MaxConversationService::parseItem('Аптеки 5'))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => ''])
-        ->and(MaxConversationService::parseItem('Кафе и рестораны 3.5'))->toBe(['title' => 'Кафе и рестораны', 'percent' => 3.5, 'mcc' => ''])
+    expect(MaxConversationService::parseItem('Аптеки 5'))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '', 'force_new' => false])
+        ->and(MaxConversationService::parseItem('Кафе и рестораны 3.5'))->toBe(['title' => 'Кафе и рестораны', 'percent' => 3.5, 'mcc' => '', 'force_new' => false])
+        // Маркер «+» → принудительно новая (force_new=true, «+» срезан)
+        ->and(MaxConversationService::parseItem('+Кафе 5'))->toBe(['title' => 'Кафе', 'percent' => 5.0, 'mcc' => '', 'force_new' => true])
         ->and(MaxConversationService::parseItem('Кино'))->toBeNull()
         ->and(MaxConversationService::parseItem(''))->toBeNull();
 });
@@ -178,6 +180,7 @@ test('parseItem разбирает примечание через пробел 
         'title' => 'Аптеки',
         'percent' => 5.0,
         'mcc' => 'только 03',
+        'force_new' => false,
     ])
         ->and(MaxConversationService::parseItem('Кафе 3,5 по будням')['mcc'])->toBe('по будням')
         ->and(MaxConversationService::parseItem('Аптеки 5% только 03')['mcc'])->toBe('только 03')
@@ -187,7 +190,7 @@ test('parseItem разбирает примечание через пробел 
 test('parseItem не пропускает перенос строки в названии (защита кнопки)', function () {
     // Перенос внутри названия → null (иначе \n попал бы в текст кнопки и сломал рендер)
     expect(MaxConversationService::parseItem("Аптеки\nсамые дешёвые 5"))->toBeNull()
-        ->and(MaxConversationService::parseItem("Аптеки\n5"))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '']);
+        ->and(MaxConversationService::parseItem("Аптеки\n5"))->toBe(['title' => 'Аптеки', 'percent' => 5.0, 'mcc' => '', 'force_new' => false]);
 });
 
 test('callback del удаляет пункт и edit-ит редактор', function () {
@@ -297,7 +300,7 @@ test('callback replace удаляет старые категории и зап�
     $user = User::factory()->create(['max_id' => '42']);
     $bank = Bank::create(['user_id' => $user->id, 'title' => 'Сбербанк']);
     $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '1111', 'color' => '#000000', 'cashback_json' => null]);
-    $category = \App\Models\Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => 'аптека', 'icon' => '', 'color' => '#000000']);
+    $category = \App\Models\Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => 'аптека']);
     \App\Models\Cashback::create(['card_id' => $card->id, 'category_id' => $category->id, 'cashback_percentage' => 3.0, 'mcc' => '']);
 
     Cache::put('bot.state.max.42', [
@@ -319,7 +322,7 @@ test('callback merge НЕ удаляет старые категории', funct
     $user = User::factory()->create(['max_id' => '42']);
     $bank = Bank::create(['user_id' => $user->id, 'title' => 'Тинькофф']);
     $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '2222', 'color' => '#000000', 'cashback_json' => null]);
-    $category1 = \App\Models\Category::create(['user_id' => $user->id, 'title' => 'Кафе', 'keywords' => 'кафе', 'icon' => '', 'color' => '#000000']);
+    $category1 = \App\Models\Category::create(['user_id' => $user->id, 'title' => 'Кафе', 'keywords' => 'кафе']);
     \App\Models\Cashback::create(['card_id' => $card->id, 'category_id' => $category1->id, 'cashback_percentage' => 3.0, 'mcc' => '']);
 
     Cache::put('bot.state.max.42', [
@@ -621,7 +624,7 @@ test('callback merge сохраняет примечание items в pivot', fu
     $user = User::factory()->create(['max_id' => '42']);
     $bank = Bank::create(['user_id' => $user->id, 'title' => 'Альфа']);
     $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '9999', 'color' => '#000000', 'cashback_json' => null]);
-    $category = \App\Models\Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '', 'icon' => '', 'color' => '#000000']);
+    $category = \App\Models\Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
 
     Cache::put('bot.state.max.42', [
         'name' => 'await_confirm',

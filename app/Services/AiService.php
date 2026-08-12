@@ -13,19 +13,6 @@ use Illuminate\Support\Str;
 class AiService
 {
     /**
-     * Минимальный процент сходства строк (similar_text), при котором
-     * распознанная категория считается совпавшей с категорией пользователя.
-     */
-    private const SIMILARITY_THRESHOLD = 70;
-
-    /**
-     * Минимальная длина строки (в символах) для шага сопоставления по вхождению
-     * подстроки. Короткие строки («и», «АЗС») через подстроку не сравниваются —
-     * иначе они матчат почти любую категорию.
-     */
-    private const MIN_SUBSTRING_LENGTH = 4;
-
-    /**
      * Генерирует промпт для GigaChat с категориями пользователя.
      *
      * @param  int  $userId  ID пользователя.
@@ -218,121 +205,27 @@ class AiService
      */
     private static function mapToUserCategories(array $recognized, int $userId): array
     {
+        $matcher = new CategoryMatcher;
+
         $categories = Category::query()
             ->where('user_id', $userId)
             ->orderBy('title')
-            ->get(['title', 'keywords']);
+            ->get(['id', 'title', 'keywords']);
 
         foreach ($recognized as &$item) {
             if (! is_array($item) || ! isset($item['category'])) {
                 continue;
             }
 
-            $matched = self::matchCategory((string) $item['category'], $categories);
+            $matched = $matcher->match((string) $item['category'], $categories);
 
             if ($matched !== null) {
-                $item['category'] = $matched;
+                $item['category'] = $matched->title;
             }
         }
         unset($item);
 
         return $recognized;
-    }
-
-    /**
-     * Ищет каноничный title категории пользователя для распознанной строки.
-     *
-     * @param  string  $recognized  Распознанная GigaChat строка категории.
-     * @param  \Illuminate\Support\Collection  $categories  Категории пользователя.
-     * @return string|null Каноничный title либо null при отсутствии совпадения.
-     */
-    private static function matchCategory(string $recognized, $categories): ?string
-    {
-        $needle = self::normalize($recognized);
-
-        if ($needle === '') {
-            return null;
-        }
-
-        // 1-2. Точное совпадение по названию и по синонимам — самый надёжный вариант.
-        foreach ($categories as $category) {
-            $title = self::normalize((string) $category->title);
-
-            if ($title === $needle) {
-                return $category->title;
-            }
-
-            foreach (self::keywordsTokens($category->keywords) as $token) {
-                if ($token === $needle) {
-                    return $category->title;
-                }
-            }
-        }
-
-        // 3. Вхождение подстроки — отдельным проходом по убыванию длины названия,
-        //    чтобы самое специфичное имя побеждало. Короткие строки пропускаем,
-        //    иначе «и» или «АЗС» будут матчить почти любую категорию.
-        $byTitleLengthDesc = $categories->sortByDesc(fn ($c) => mb_strlen(self::normalize((string) $c->title)));
-
-        foreach ($byTitleLengthDesc as $category) {
-            $title = self::normalize((string) $category->title);
-
-            if (mb_strlen($title) < self::MIN_SUBSTRING_LENGTH || mb_strlen($needle) < self::MIN_SUBSTRING_LENGTH) {
-                continue;
-            }
-
-            if (str_contains($needle, $title) || str_contains($title, $needle)) {
-                return $category->title;
-            }
-        }
-
-        // 4. Наибольшее сходство строк среди всех категорий, если выше порога.
-        $bestTitle = null;
-        $bestPercent = 0.0;
-
-        foreach ($categories as $category) {
-            $title = self::normalize((string) $category->title);
-            if ($title === '') {
-                continue;
-            }
-
-            similar_text($needle, $title, $percent);
-
-            if ($percent > $bestPercent) {
-                $bestPercent = $percent;
-                $bestTitle = $category->title;
-            }
-        }
-
-        return $bestPercent >= self::SIMILARITY_THRESHOLD ? $bestTitle : null;
-    }
-
-    /**
-     * Нормализует строку для сравнения: нижний регистр + обрезка пробелов.
-     *
-     * @param  string  $value  Исходная строка.
-     * @return string Нормализованная строка.
-     */
-    private static function normalize(string $value): string
-    {
-        return trim(mb_strtolower($value));
-    }
-
-    /**
-     * Разбивает поле keywords на нормализованные токены-синонимы.
-     *
-     * @param  string|null  $keywords  Поле keywords категории.
-     * @return string[] Массив нормализованных синонимов.
-     */
-    private static function keywordsTokens(?string $keywords): array
-    {
-        if ($keywords === null || trim($keywords) === '') {
-            return [];
-        }
-
-        $tokens = preg_split('/\s+/u', trim($keywords)) ?: [];
-
-        return array_map(fn (string $token) => self::normalize($token), $tokens);
     }
 
     private static function getToken(): string

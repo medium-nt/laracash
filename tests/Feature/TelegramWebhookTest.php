@@ -478,3 +478,174 @@ test('невалидная строка со спецсимволами экра
             && str_contains($t, '&lt;b&gt;мусор');
     });
 });
+
+// ============ Fuzzy-сопоставление категорий (текстовый ввод) ============
+
+test('fuzzy: «Кафе» резолвится в существующую «Кафе и рестораны» без создания дубля', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Кафе и рестораны', 'keywords' => '']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, 'Кафе 5');
+
+    // Редактор показал КАНОНИЧНОЕ название (✅), а не введённое «Кафе» как новое
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($data['text'] ?? '', 'Проверь распознанное')
+            && str_contains($data['text'] ?? '', 'Кафе и рестораны');
+    });
+
+    // Сохранить (merge) → apply
+    $this->withHeaders(['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'])
+        ->postJson('/api/telegram/webhook', [
+            'update_id' => 320,
+            'callback_query' => [
+                'id' => 'cb_merge_fuzzy',
+                'message' => ['chat' => ['id' => 1, 'type' => 'private']],
+                'from' => ['id' => 42],
+                'data' => 'merge',
+            ],
+        ])
+        ->assertOk();
+
+    // Новая категория НЕ создана — осталась одна «Кафе и рестораны»
+    expect(Category::where('user_id', $user->id)->count())->toBe(1);
+    // Кешбэк записан в pivot для существующей категории
+    expect(Cashback::where('card_id', $card->id)->count())->toBe(1);
+});
+
+test('fuzzy: «Супермаркет» ≈ «Супермаркеты» — тоже резолвится без дубля', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Супермаркеты', 'keywords' => '']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, 'Супермаркет 3');
+
+    $this->withHeaders(['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'])
+        ->postJson('/api/telegram/webhook', [
+            'update_id' => 330,
+            'callback_query' => [
+                'id' => 'cb_merge_sm',
+                'message' => ['chat' => ['id' => 1, 'type' => 'private']],
+                'from' => ['id' => 42],
+                'data' => 'merge',
+            ],
+        ])
+        ->assertOk();
+
+    expect(Category::where('user_id', $user->id)->count())->toBe(1);
+});
+
+test('force_new: «+Кафе 5» создаёт отдельную «Кафе» рядом с «Кафе и рестораны»', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Кафе и рестораны', 'keywords' => '']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, '+Кафе 5');
+
+    // Редактор показал отдельную «Кафе» (🆕), НЕ подменив на «Кафе и рестораны»
+    Http::assertSent(function ($request) {
+        $text = $request->data()['text'] ?? '';
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($text, 'Проверь распознанное')
+            && str_contains($text, 'Кафе')
+            && ! str_contains($text, 'Кафе и рестораны');
+    });
+
+    // Сохранить (merge) → apply
+    $this->withHeaders(['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'])
+        ->postJson('/api/telegram/webhook', [
+            'update_id' => 340,
+            'callback_query' => [
+                'id' => 'cb_merge_force',
+                'message' => ['chat' => ['id' => 1, 'type' => 'private']],
+                'from' => ['id' => 42],
+                'data' => 'merge',
+            ],
+        ])
+        ->assertOk();
+
+    // Теперь ОБЕ категории: «Кафе и рестораны» + созданная «Кафе»
+    expect(Category::where('user_id', $user->id)->count())->toBe(2)
+        ->and(Category::where('user_id', $user->id)->where('title', 'Кафе')->exists())->toBeTrue()
+        ->and(Cashback::where('card_id', $card->id)->count())->toBe(1);
+});
+
+test('buildEditorText: легенда ✅/🆕 НЕ выводится, когда все категории свои', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    // Только существующая категория (✅) — легенды быть НЕ должно
+    tgSendTextList(42, $card->id, 'Аптеки 5');
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Проверь распознанное')
+        && ! str_contains($r->data()['text'] ?? '', 'ваша категория'));
+});
+
+test('buildEditorText: легенда ✅/🆕 выводится внизу при наличии новой категории', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    // Смешанный список: ✅ Аптеки + 🆕 Такси — легенда есть и идёт последней строкой
+    tgSendTextList(42, $card->id, "Аптеки 5\nТакси 3");
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Проверь распознанное')
+        && str_ends_with($r->data()['text'] ?? '', '✅ — ваша категория, 🆕 — новая, будет создана'));
+});
+
+test('buildEditorText: дублирующая категория (один category_id у двух пунктов) помечается ⚠️', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => '']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    // «Аптека» (подстрока→Аптеки) и «Аптеки» (exact→Аптеки) — обе канонизируются в один category_id
+    tgSendTextList(42, $card->id, "Аптека 5\nАптеки 7");
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Проверь распознанное')
+        && str_contains($r->data()['text'] ?? '', '⚠️')
+        && str_contains($r->data()['text'] ?? '', 'дублирующая категория'));
+});
