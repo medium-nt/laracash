@@ -136,6 +136,13 @@ class MaxConversationService
             return;
         }
 
+        // В await_photo можно ввести категории и текстом — по строке «Категория процент»
+        if ($state['name'] === 'await_photo' && $text !== '') {
+            $this->processTextList($text, $chatId, $user);
+
+            return;
+        }
+
         // Фото вне состояния ожидания — НЕ удаляем (MAX), только подсказываем порядок действий
         if ($photoUrl !== null) {
             $this->sendTransient((string) $user->max_id, $chatId, 'Сначала выбери карту (Обновить кешбэк), затем пришли скриншот.');
@@ -293,7 +300,7 @@ class MaxConversationService
             }
 
             $label = e(($card->bank?->title ?? 'Без банка').' '.$card->number);
-            $this->sendTransient((string) $user->max_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label}.");
+            $this->sendTransient((string) $user->max_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label} ИЛИ введи их текстом — по одной в строке в формате «Категория процент» (напр.: Аптеки 5 / Кафе 3,5).");
             $this->setStateName((string) $user->max_id, 'await_photo', ['card_id' => $cardId]);
 
             return;
@@ -423,6 +430,80 @@ class MaxConversationService
             'msg_id' => $messageId,
             'last_bot_msg' => null,
         ]);
+    }
+
+    /**
+     * Парсит текстовый список категорий (по строкам «Категория процент») и открывает редактор.
+     *
+     * Валидные строки попадают в редактор (с category_id: ✅ своя / 🆕 новая),
+     * невалидные — отдельным сообщением «Не понял строки». Если не распознано ни одной
+     * строки — показываем пример формата и остаёмся в await_photo. Домен (image, фото-референс)
+     * не используется: это альтернативный путь ввода без скриншота.
+     *
+     * @param  string  $text  Многострочный ввод пользователя
+     * @param  int|string  $chatId  ID чата
+     * @param  User  $user  Пользователь
+     */
+    private function processTextList(string $text, int|string $chatId, User $user): void
+    {
+        $state = $this->state($user->max_id);
+        $cardId = $state['card_id'] ?? null;
+
+        if ($cardId === null) {
+            $this->sendTransient((string) $user->max_id, $chatId, 'Сессия истекла. /menu');
+            $this->setState((string) $user->max_id, 'idle');
+
+            return;
+        }
+
+        $items = [];
+        $invalid = [];
+        foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+            $parsed = self::parseItem($line);
+            if ($parsed === null) {
+                $invalid[] = $line;
+
+                continue;
+            }
+            $parsed['category_id'] = $this->resolveCategoryId($user->id, $parsed['title']);
+            $items[] = $parsed;
+        }
+
+        // Ничего не распознали — не открываем пустой редактор, подсказываем формат
+        if (empty($items)) {
+            $this->sendTransient((string) $user->max_id, $chatId, 'Не получилось распознать категории. Формат — по одной в строке: «Категория процент» (напр.: Аптеки 5 / Кафе 3,5).');
+
+            return;
+        }
+
+        // Cleanup транзитного промпта «Пришли скриншот …» (СВОЁ сообщение — можно удалить)
+        $currentState = $this->state((string) $user->max_id);
+        if (! empty($currentState['last_bot_msg'])) {
+            $this->bot->deleteMessage($chatId, $currentState['last_bot_msg']);
+        }
+
+        // Редактор (НЕ транзитное — живёт в msg_id). image/photo_msg_id НЕ кладём: текстовый путь.
+        $messageId = $this->renderEditor($chatId, null, $items);
+
+        $this->setState((string) $user->max_id, 'await_confirm', [
+            'card_id' => $cardId,
+            'items' => $items,
+            'msg_id' => $messageId,
+            'last_bot_msg' => null,
+        ]);
+
+        // Невалидные строки — отдельной подсказкой (sendTransient запишет last_bot_msg поверх null)
+        if (! empty($invalid)) {
+            $this->sendTransient(
+                (string) $user->max_id,
+                $chatId,
+                'Не понял строки: '.implode(' | ', array_map(fn ($l) => '«'.e($l).'»', $invalid))
+            );
+        }
     }
 
     /**

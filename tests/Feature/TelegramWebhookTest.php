@@ -2,6 +2,8 @@
 
 use App\Models\Bank;
 use App\Models\Card;
+use App\Models\Cashback;
+use App\Models\Category;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -262,5 +264,217 @@ test('callback cmd:recheck от НЕпривязанного повторяет 
         return str_contains($request->url(), 'sendMessage')
             && str_contains($data['text'] ?? '', 'привяжи аккаунт')
             && str_contains($data['reply_markup'] ?? '', 'cmd:recheck');
+    });
+});
+
+// ============ Текстовый ввод кешбэка (альтернатива скриншоту) ============
+
+/**
+ * Сценарий «выбор карты → ввод категорий текстом → редактор».
+ * Создаёт карту и переводит юзера в await_photo (callback card:{id}).
+ */
+function tgSendTextList(int $userId, int $cardId, string $text): void
+{
+    $headers = ['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'];
+
+    test()->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 300,
+        'callback_query' => [
+            'id' => 'cb_card',
+            'message' => ['chat' => ['id' => 1, 'type' => 'private']],
+            'from' => ['id' => $userId],
+            'data' => 'card:'.$cardId,
+        ],
+    ])->assertOk();
+
+    test()->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 301,
+        'message' => [
+            'chat' => ['id' => 1, 'type' => 'private'],
+            'from' => ['id' => $userId],
+            'message_id' => 555,
+            'text' => $text,
+        ],
+    ])->assertOk();
+}
+
+test('в await_photo текст-список открывает редактор: своя категория ✅, новая 🆕', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+    // «Аптеки» уже есть у юзера → ✅; «Кафе» нет → 🆕
+    Category::create(['user_id' => $user->id, 'title' => 'Аптеки', 'keywords' => 'Аптеки']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, "Аптеки 5\nКафе 3,5");
+
+    // Редактор: содержит заголовок и обе категории
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($data['text'] ?? '', 'Проверь распознанное')
+            && str_contains($data['text'] ?? '', 'Аптеки')
+            && str_contains($data['text'] ?? '', 'Кафе');
+    });
+});
+
+test('текст-список с кривыми строками: валидные в редактор, невалидные — в подсказку', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, "Аптеки 5\n--- билеты ---\nКафе 3,5");
+
+    // Редактор получил валидные строки
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($data['text'] ?? '', 'Проверь распознанное')
+            && str_contains($data['text'] ?? '', 'Аптеки')
+            && str_contains($data['text'] ?? '', 'Кафе');
+    });
+    // Невалидная строка упомянута отдельной подсказкой
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($data['text'] ?? '', 'Не понял строки')
+            && str_contains($data['text'] ?? '', 'билеты');
+    });
+});
+
+test('полностью непонятный текст не открывает редактор, подсказывает формат', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, "привет\nкак дела");
+
+    // Подсказка о формате...
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($data['text'] ?? '', 'Не получилось распознать');
+    });
+    // ...а редактор НЕ открывался
+    Http::assertNotSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), 'sendMessage')
+            && str_contains($data['text'] ?? '', 'Проверь распознанное');
+    });
+});
+
+test('e2e: текст-список → Сохранить(merge) пишет pivot и cashback_json', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+
+    tgSendTextList(42, $card->id, "Аптеки 5\nКафе 3,5");
+
+    // Сохранить (merge) → apply → pivot + cashback_json
+    $this->withHeaders(['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'])
+        ->postJson('/api/telegram/webhook', [
+            'update_id' => 302,
+            'callback_query' => [
+                'id' => 'cb_merge',
+                'message' => ['chat' => ['id' => 1, 'type' => 'private']],
+                'from' => ['id' => 42],
+                'data' => 'merge',
+            ],
+        ])
+        ->assertOk();
+
+    // 2 категории в pivot, cashback_json записан
+    expect(Cashback::where('card_id', $card->id)->count())->toBe(2);
+    expect($card->fresh()->cashback_json)->toHaveCount(2);
+});
+
+test('после полностью невалидного ввода можно повторить — состояние сохранено в await_photo', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+    $headers = ['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'];
+
+    // карта → await_photo
+    $this->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 400,
+        'callback_query' => ['id' => 'cb_p5', 'message' => ['chat' => ['id' => 1, 'type' => 'private']], 'from' => ['id' => 42], 'data' => 'card:'.$card->id],
+    ])->assertOk();
+
+    // полностью невалидный ввод
+    $this->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 401,
+        'message' => ['chat' => ['id' => 1, 'type' => 'private'], 'from' => ['id' => 42], 'message_id' => 600, 'text' => 'бред'],
+    ])->assertOk();
+
+    // редактор НЕ открыт...
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'sendMessage') && str_contains($r->data()['text'] ?? '', 'Проверь распознанное'));
+
+    // повторный валидный ввод → редактор открыт (await_photo сохранён)
+    $this->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 402,
+        'message' => ['chat' => ['id' => 1, 'type' => 'private'], 'from' => ['id' => 42], 'message_id' => 601, 'text' => 'Аптеки 5'],
+    ])->assertOk();
+
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage') && str_contains($r->data()['text'] ?? '', 'Проверь распознанное'));
+});
+
+test('невалидная строка со спецсимволами экранируется в HTML-подсказке', function () {
+    config()->set('tg.webhook_secret', 'SECRET');
+    config()->set('tg.token', 'TEST_TOKEN');
+
+    $user = User::factory()->create(['telegram_id' => '42']);
+    $bank = Bank::create(['title' => 'Тинькофф', 'user_id' => $user->id]);
+    $card = Card::create(['user_id' => $user->id, 'bank_id' => $bank->id, 'number' => '4276 1234', 'color' => 'dark']);
+
+    Http::fake(['api.telegram.org/*' => Http::response(['ok' => true])]);
+    $headers = ['X-Telegram-Bot-Api-Secret-Token' => 'SECRET'];
+
+    $this->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 410,
+        'callback_query' => ['id' => 'cb_p4', 'message' => ['chat' => ['id' => 1, 'type' => 'private']], 'from' => ['id' => 42], 'data' => 'card:'.$card->id],
+    ])->assertOk();
+
+    // валидная + невалидная строка с угловыми скобками
+    $this->withHeaders($headers)->postJson('/api/telegram/webhook', [
+        'update_id' => 411,
+        'message' => ['chat' => ['id' => 1, 'type' => 'private'], 'from' => ['id' => 42], 'message_id' => 610, 'text' => "Аптеки 5\n<b>мусор"],
+    ])->assertOk();
+
+    // невалидная строка экранирована в подсказке (HTML-entities, без сырых <>)
+    Http::assertSent(function ($r) {
+        $t = $r->data()['text'] ?? '';
+
+        return str_contains($r->url(), 'sendMessage')
+            && str_contains($t, 'Не понял строки')
+            && str_contains($t, '&lt;b&gt;мусор');
     });
 });
