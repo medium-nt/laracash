@@ -181,6 +181,58 @@ test('apply присоединяет к существующей категор�
         ->and($result['created'])->toBe([]);
 });
 
+test('apply сохраняет mcc (примечание) из raw в pivot', function () {
+    // Arrange: существующая категория пользователя
+    $category = Category::create([
+        'title' => 'Аптеки',
+        'user_id' => $this->userId,
+        'keywords' => '',
+    ]);
+
+    $raw = [
+        ['category' => 'Аптеки', 'cashback' => 5, 'mcc' => '5912, только по будням'],
+    ];
+
+    // Act
+    $import = new CashbackImportService(app(AiService::class));
+    $import->apply($this->userId, $this->cardId, $raw);
+
+    // Assert: примечание сохранено в pivot
+    $cashback = Cashback::query()
+        ->where('card_id', $this->cardId)
+        ->where('category_id', $category->id)
+        ->first();
+
+    expect($cashback)->not->toBeNull()
+        ->and($cashback->mcc)->toBe('5912, только по будням');
+});
+
+test('apply без mcc в raw сохраняет пустую строку (обратная совместимость)', function () {
+    // Arrange: существующая категория пользователя
+    $category = Category::create([
+        'title' => 'Аптеки',
+        'user_id' => $this->userId,
+        'keywords' => '',
+    ]);
+
+    $raw = [
+        ['category' => 'Аптеки', 'cashback' => 5], // без mcc — как от AI/старых ботов
+    ];
+
+    // Act
+    $import = new CashbackImportService(app(AiService::class));
+    $import->apply($this->userId, $this->cardId, $raw);
+
+    // Assert: mcc пустая строка (колонка NOT NULL)
+    $cashback = Cashback::query()
+        ->where('card_id', $this->cardId)
+        ->where('category_id', $category->id)
+        ->first();
+
+    expect($cashback)->not->toBeNull()
+        ->and($cashback->mcc)->toBe('');
+});
+
 test('apply с пустым raw не перезаписывает cashback_json', function () {
     // Arrange: set initial cashback_json
     $initialJson = [['category' => 'Такси', 'cashback' => 10]];

@@ -150,6 +150,24 @@ class MaxConversationService
             return;
         }
 
+        // Ввод примечания (MCC/условие) для конкретного пункта редактора
+        if ($state['name'] === 'await_note') {
+            $index = $state['index'] ?? null;
+            $items = $state['items'] ?? [];
+            if ($index !== null && isset($items[$index])) {
+                $items[$index]['mcc'] = ($text === '' || $text === '/skip')
+                    ? '' : self::sanitizeNote($text);
+
+                if (! empty($state['last_bot_msg'])) {
+                    $this->bot->deleteMessage($chatId, $state['last_bot_msg']);
+                }
+                $this->setStateName((string) $user->max_id, 'await_confirm', ['items' => $items, 'last_bot_msg' => null]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items);
+            }
+
+            return;
+        }
+
         // Обработка состояний редактора (правка/добавление пункта)
         if ($state['name'] === 'await_edit' || $state['name'] === 'await_add') {
             $parsed = self::parseItem($text);
@@ -166,6 +184,12 @@ class MaxConversationService
             if ($state['name'] === 'await_edit') {
                 $index = $state['index'] ?? null;
                 if ($index !== null && isset($items[$index])) {
+                    // Если юзер не дописал примечание (mcc='') — сохраняем прежнее,
+                    // иначе правка процента «Аптеки 7» затёрла бы уже заданный MCC.
+                    // Убрать/изменить примечание точечно — кнопка 📝 (await_note, /skip).
+                    if ($parsed['mcc'] === '') {
+                        $parsed['mcc'] = $items[$index]['mcc'] ?? '';
+                    }
                     $items[$index] = $parsed;
                 }
             } else {
@@ -300,7 +324,7 @@ class MaxConversationService
             }
 
             $label = e(($card->bank?->title ?? 'Без банка').' '.$card->number);
-            $this->sendTransient((string) $user->max_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label} ИЛИ введи их текстом — по одной в строке в формате «Категория процент» (напр.: Аптеки 5 / Кафе 3,5).");
+            $this->sendTransient((string) $user->max_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label} ИЛИ введи их текстом — по одной в строке в формате «Категория процент», можно дописать примечание через пробел (напр.: Аптеки 5 / Кафе 3,5 / Аптеки 5 только 03).");
             $this->setStateName((string) $user->max_id, 'await_photo', ['card_id' => $cardId]);
 
             return;
@@ -321,7 +345,7 @@ class MaxConversationService
 
         if (str_starts_with($data, 'edit:')) {
             $index = (int) substr($data, 5);
-            $this->sendTransient((string) $user->max_id, $chatId, 'Пришли «название процент», напр. `Аптеки 5`');
+            $this->sendTransient((string) $user->max_id, $chatId, 'Пришли «название процент», можно дописать примечание через пробел. Напр.: Аптеки 5 или Аптеки 5 только 03');
             $this->setStateName((string) $user->max_id, 'await_edit', ['index' => $index]);
 
             return;
@@ -340,8 +364,21 @@ class MaxConversationService
             return;
         }
 
+        if (str_starts_with($data, 'note:')) {
+            $index = (int) substr($data, 5);
+            $state = $this->state($user->max_id);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $title = e($state['items'][$index]['title'] ?? '');
+                $this->sendTransient((string) $user->max_id, $chatId, "Пришли примечание для «{$title}» (MCC код или условие). /skip — убрать примечание.");
+                $this->setStateName((string) $user->max_id, 'await_note', ['index' => $index]);
+            }
+
+            return;
+        }
+
         if ($data === 'add') {
-            $this->sendTransient((string) $user->max_id, $chatId, 'Пришли «название процент», напр. `Кафе и рестораны 3.5`');
+            $this->sendTransient((string) $user->max_id, $chatId, 'Пришли «название процент», можно дописать примечание через пробел. Напр.: Кафе 3.5 или Аптеки 5 только 03');
             $this->setStateName((string) $user->max_id, 'await_add');
 
             return;
@@ -551,6 +588,7 @@ class MaxConversationService
             $raw = array_map(fn ($it) => [
                 'category' => $it['title'],
                 'cashback' => $it['percent'],
+                'mcc' => $it['mcc'] ?? '',
             ], $items);
 
             $card = Card::where('id', $cardId)->where('user_id', $user->id)->first();
@@ -617,11 +655,17 @@ class MaxConversationService
         $lines = ['Проверь распознанное (✅ — ваша, 🆕 — новая):'];
         foreach ($items as $i => $item) {
             $mark = empty($item['category_id']) ? '🆕' : '✅';
-            // e() обязательно: title из AI/ручного ввода, format=html — без экранирования рендер сломается.
-            $lines[] = ($i + 1).'. '.$mark.' '.e($item['title']).' — '.$item['percent'].'%';
+            // e() обязательно: title/mcc из AI/ручного ввода, format=html — без экранирования рендер сломается.
+            $line = ($i + 1).'. '.$mark.' '.e($item['title']).' — '.$item['percent'].'%';
+            // Примечание (MCC/условие) — в той же строке, через «·», чтобы пункт занимал одну строку
+            if (! empty($item['mcc'])) {
+                $line .= ' · 📝 '.e($item['mcc']);
+            }
+            $lines[] = $line;
         }
 
-        return implode("\n", $lines);
+        // Пустая строка между пунктами — визуальное разделение, чтобы список не сливался
+        return implode("\n\n", $lines);
     }
 
     /**
@@ -651,6 +695,7 @@ class MaxConversationService
             $keyboard[] = [
                 ['type' => 'callback', 'text' => $editText, 'payload' => 'edit:'.$i],
                 ['type' => 'callback', 'text' => '🗑', 'payload' => 'del:'.$i],
+                ['type' => 'callback', 'text' => '📝', 'payload' => 'note:'.$i],
             ];
         }
 
@@ -664,27 +709,48 @@ class MaxConversationService
     /**
      * Парсит «Название процент» → ['title', 'percent'] или null.
      *
-     * @param  string  $text  Ввод пользователя
-     * @return array|null ['title'=>string,'percent'=>float] или null
+     * @param  string  $text  Ввод пользователя (напр. «Аптеки 5», «Кафе 3.5» или «Аптеки 5 только 03»)
+     * @return array|null ['title'=>string,'percent'=>float,'mcc'=>string] (mcc='' если примечания нет) или null
      */
     public static function parseItem(string $text): ?array
     {
-        if (trim($text) === '') {
+        $text = trim($text);
+        if ($text === '') {
             return null;
         }
 
-        if (! preg_match('/^(.+?)\s+(\d+(?:[.,]\d+)?)%?\s*$/u', $text, $matches)) {
+        // Формат: «название — пробел — процент (число, опц. %) — пробел — примечание».
+        // Процент = ПЕРВОЕ число в строке: тогда цифры в примечании (MCC-коды, «03», даты)
+        // не путаются с процентом. Пр.: «Аптеки 5 только 03» → title=Аптеки, percent=5, mcc=«только 03».
+        // Без модификатора 's': title (.+?) физически не может содержать перенос строки,
+        // иначе он попал бы в текст inline-кнопки и сломал рендер.
+        if (! preg_match('/^(.+?)\s+(\d+(?:[.,]\d+)?)%?\s*(.*)$/u', $text, $m)) {
             return null;
         }
 
-        $title = trim($matches[1]);
-        $percent = (float) str_replace(',', '.', $matches[2]);
+        $title = trim($m[1]);
+        $percent = (float) str_replace(',', '.', $m[2]);
+        $mcc = self::sanitizeNote($m[3]); // '' если после процента ничего нет
 
         if ($title === '' || $percent <= 0 || $percent > 100) {
             return null;
         }
 
-        return ['title' => $title, 'percent' => $percent];
+        return ['title' => $title, 'percent' => $percent, 'mcc' => $mcc];
+    }
+
+    /**
+     * Очищает примечание (MCC/условие): trim, без переносов/табов (ломают рендеринг кнопки и
+     * payload), обрезка до 255 символов (длина колонки mcc в БД).
+     *
+     * @param  string  $note  Сырой текст примечания
+     * @return string Очищенное примечание (может быть пустой строкой)
+     */
+    private static function sanitizeNote(string $note): string
+    {
+        $note = trim(str_replace(["\r", "\n", "\t"], ' ', $note));
+
+        return mb_substr($note, 0, 255);
     }
 
     /**
