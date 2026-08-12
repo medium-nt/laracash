@@ -2,220 +2,203 @@
 
 namespace App\Services\Bot;
 
-use App\Models\Card;
-use App\Models\Category;
 use App\Models\User;
-use App\Services\CategoryMatcher;
 use App\Services\Max\MaxBotService;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 /**
- * Диалоговый движок MAX-бота (state machine по max_id в Cache).
+ * Диалоговый движок MAX-бота: платформенный адаптер поверх общей стейт-машины
+ * AbstractBotConversationService.
  *
- * Порт BotConversationService под формат MAX API с адаптацией cleanup:
- *  - парсинг $update по update_type (message_created / message_callback / bot_started);
- *  - пользователь ищется по users.max_id;
- *  - state/lock/rate-limit в отдельном namespace bot.state.max.* (не конфликтует с TG);
- *  - ⚠️ В диалоге MAX бот может удалять ТОЛЬКО СВОИ сообщения → сообщения и фото
- *    пользователя НЕ удаляются; transient-сообщения бота и редактор (edit) — затрагиваются.
+ * Реализует только MAX-специфику: парсинг update по update_type
+ * (message_created / message_callback / bot_started), формат inline-кнопок (payload),
+ * делегацию транспорту MaxBotService.
  *
- * Домен (CashbackImportService, AiService) переиспользуется без изменений.
+ * ⚠️ В диалоге MAX бот может удалять ТОЛЬКО СВОИ сообщения → canDeleteUserMessages()=false:
+ * сообщения и фото пользователя НЕ удаляются; transient-сообщения бота и редактор
+ * (edit) — затрагиваются. Поле photo_msg_id не сохраняется.
  */
-class MaxConversationService
+final class MaxConversationService extends AbstractBotConversationService
 {
-    private const STATE_TTL = 1800;
-
     /**
      * Создать новый экземпляр сервиса.
      */
     public function __construct(
         private MaxBotService $bot,
-        private CashbackImportService $import,
-    ) {}
+        CashbackImportService $import,
+    ) {
+        parent::__construct($import);
+    }
 
     /**
-     * Единая точка входа для обработки update от MAX.
+     * Роутит update по update_type: callback / bot_started / message.
      *
-     * @param  array  $update  Данные от MAX Webhook
+     * РЕАЛЬНЫЙ формат MAX (снят с живого API):
+     *  - message_callback: автор нажатия в callback.user.user_id; callback_id/payload в callback.*.
+     *  - bot_started: автор в user.user_id (топ-уровень).
+     *  - message_created: автор в message.sender.user_id.
+     *
+     * @param  array  $update  Полный webhook-update
+     * @param  int|string  $chatId  ID чата
+     * @param  User  $user  Пользователь
      */
-    public function handle(array $update): void
+    protected function dispatch(array $update, int|string $chatId, User $user): void
     {
         $type = $update['update_type'] ?? '';
 
-        // РЕАЛЬНЫЙ формат MAX (снят с живого API):
-        //  - message_created: chat_id в message.recipient.chat_id; автор в message.sender.user_id.
-        //  - message_callback: chat_id в message.recipient.chat_id; автор нажатия в callback.user.user_id
-        //    (message.sender тут = сам бот, поэтому callback.user проверяем ПЕРВЫМ);
-        //    callback_id/payload — внутри callback.*.
-        //  - bot_started: автор в user.user_id (топ-уровень).
+        if ($type === 'message_callback') {
+            $this->handleCallback($update, $chatId, $user);
+        } elseif ($type === 'bot_started') {
+            $this->sendMenu($chatId, $user);
+        } else {
+            $this->handleMessage($update['message'] ?? [], $chatId, $user);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Platform hooks
+    // -------------------------------------------------------------------------
+
+    /**
+     * Префикс namespace для cache-ключей: MAX использует 'max.', чтобы не конфликтовать
+     * с state/lock/rate-limit Telegram в общем Cache.
+     */
+    protected function cacheNamespace(): string
+    {
+        return 'max.';
+    }
+
+    /**
+     * Колонка в users для поиска по MAX id.
+     */
+    protected function userIdColumn(): string
+    {
+        return 'max_id';
+    }
+
+    /**
+     * MAX id пользователя из модели.
+     */
+    protected function platformUserId(User $user): string
+    {
+        return (string) $user->max_id;
+    }
+
+    /**
+     * Путь для URL привязки MAX-аккаунта.
+     */
+    protected function linkPath(): string
+    {
+        return '/profile/max-link?max=';
+    }
+
+    /**
+     * MAX-бот НЕ может удалять чужие сообщения в диалоге — только свои.
+     */
+    protected function canDeleteUserMessages(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Формирует inline-кнопку в формате MAX API.
+     *
+     * @param  string  $text  Текст кнопки
+     * @param  string  $data  Payload
+     * @return array ['type'=>'callback','text'=>..,'payload'=>..]
+     */
+    protected function makeButton(string $text, string $data): array
+    {
+        return ['type' => 'callback', 'text' => $text, 'payload' => $data];
+    }
+
+    /**
+     * Извлекает chat id из MAX-update.
+     *
+     * @param  array  $update  Полный webhook-update
+     */
+    protected function extractChatId(array $update): int|string|null
+    {
         $msg = $update['message'] ?? [];
-        $chatId = $update['chat_id']
+
+        return $update['chat_id']
             ?? $msg['recipient']['chat_id']
             ?? null;
-        $maxId = (string) (
+    }
+
+    /**
+     * Извлекает MAX id пользователя из update: автор нажатия кнопки (callback.user)
+     * проверяется первым, т.к. при message_callback message.sender — сам бот.
+     *
+     * @param  array  $update  Полный webhook-update
+     */
+    protected function extractUserId(array $update): string
+    {
+        $msg = $update['message'] ?? [];
+
+        return (string) (
             $update['callback']['user']['user_id']    // message_callback — автор нажатия кнопки
             ?? $msg['sender']['user_id']              // message_created — автор сообщения
             ?? $update['user']['user_id']             // bot_started / топ-уровень
             ?? $update['from']['user_id']
             ?? ''
         );
-
-        if ($chatId === null || $maxId === '') {
-            return;
-        }
-
-        $user = User::where('max_id', $maxId)->first();
-        if ($user === null) {
-            // Снимаем «часики» с callback-кнопки (напр. «Проверить»), иначе она висит до таймаута
-            $cbId = $update['callback']['callback_id'] ?? null;
-            if ($cbId !== null) {
-                $this->bot->answerCallback($cbId);
-            }
-
-            $url = config('app.url').'/profile/max-link?max='.$maxId;
-            $keyboard = [[
-                ['type' => 'callback', 'text' => 'Проверить', 'payload' => 'cmd:recheck'],
-            ]];
-            $this->bot->sendMessage($chatId, 'Сначала привяжи аккаунт '.config('app.name').": {$url}", $keyboard);
-
-            return;
-        }
-
-        // Блокировка по maxId: двойной тап / ретрай доставки не должен дать гонку.
-        // TTL 60с: downloadPhoto (15с) + GigaChat recognize (до 15с) + sendMessage — должно влезть
-        $lock = Cache::lock("bot.lock.max.{$maxId}", 60);
-        if (! $lock->get()) {
-            return;
-        }
-
-        try {
-            if ($type === 'message_callback') {
-                $this->handleCallback($update, $chatId, $user);
-            } elseif ($type === 'bot_started') {
-                $this->sendMenu($chatId, $user);
-            } else {
-                $this->handleMessage($update['message'] ?? [], $chatId, $user);
-            }
-        } finally {
-            $lock->release();
-        }
     }
 
     /**
-     * Обработка текстовых сообщений (message_created).
+     * Актуален ли update: MAX не требует отсева (личные диалоги).
      *
-     * @param  array  $message  Объект message из update
+     * @param  array  $update  Полный webhook-update
      * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
      */
-    private function handleMessage(array $message, int|string $chatId, User $user): void
+    protected function isRelevantUpdate(array $update, int|string $chatId): bool
     {
-        $text = trim((string) ($message['body']['text'] ?? ''));
-
-        // ⚠️ MAX: сообщение пользователя НЕ удаляем — бот может удалять только свои сообщения.
-        $state = $this->state($user->max_id);
-
-        if ($text === '/start' || $text === '/menu') {
-            $this->sendMenu($chatId, $user);
-
-            return;
-        }
-
-        if ($text === 'Обновить кешбэк' || $state['name'] === 'await_card') {
-            $this->sendCardKeyboard($chatId, $user);
-
-            return;
-        }
-
-        $photoUrl = $this->extractPhotoUrl($message);
-
-        if ($state['name'] === 'await_photo' && $photoUrl !== null) {
-            $this->processPhotos($message, $photoUrl, $chatId, $user);
-
-            return;
-        }
-
-        // В await_photo можно ввести категории и текстом — по строке «Категория процент»
-        if ($state['name'] === 'await_photo' && $text !== '') {
-            $this->processTextList($text, $chatId, $user);
-
-            return;
-        }
-
-        // Фото вне состояния ожидания — НЕ удаляем (MAX), только подсказываем порядок действий
-        if ($photoUrl !== null) {
-            $this->sendTransient((string) $user->max_id, $chatId, 'Сначала выбери карту (Обновить кешбэк), затем пришли скриншот.');
-
-            return;
-        }
-
-        // Ввод примечания (MCC/условие) для конкретного пункта редактора
-        if ($state['name'] === 'await_note') {
-            $index = $state['index'] ?? null;
-            $items = $state['items'] ?? [];
-            if ($index !== null && isset($items[$index])) {
-                $items[$index]['mcc'] = ($text === '' || $text === '/skip')
-                    ? '' : self::sanitizeNote($text);
-
-                if (! empty($state['last_bot_msg'])) {
-                    $this->bot->deleteMessage($chatId, $state['last_bot_msg']);
-                }
-                $this->setStateName((string) $user->max_id, 'await_confirm', ['items' => $items, 'last_bot_msg' => null]);
-                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items);
-            }
-
-            return;
-        }
-
-        // Обработка состояний редактора (правка/добавление пункта)
-        if ($state['name'] === 'await_edit' || $state['name'] === 'await_add') {
-            $parsed = self::parseItem($text);
-
-            if ($parsed === null) {
-                $this->sendTransient((string) $user->max_id, $chatId, "Не понял формат. Пришли «название процент»:\n• Аптеки 5\n• +Кафе 5 (новая категория)");
-
-                return;
-            }
-
-            $parsed = $this->attachCategory($parsed, $this->userCategories($user->id));
-
-            $items = $state['items'] ?? [];
-            if ($state['name'] === 'await_edit') {
-                $index = $state['index'] ?? null;
-                if ($index !== null && isset($items[$index])) {
-                    // Если юзер не дописал примечание (mcc='') — сохраняем прежнее,
-                    // иначе правка процента «Аптеки 7» затёрла бы уже заданный MCC.
-                    // Убрать/изменить примечание точечно — кнопка 📝 (await_note, /skip).
-                    if ($parsed['mcc'] === '') {
-                        $parsed['mcc'] = $items[$index]['mcc'] ?? '';
-                    }
-                    $items[$index] = $parsed;
-                }
-            } else {
-                $items[] = $parsed;
-            }
-
-            // Cleanup транзитного промпта правки (СВОЁ сообщение — можно удалить)
-            if (! empty($state['last_bot_msg'])) {
-                $this->bot->deleteMessage($chatId, $state['last_bot_msg']);
-            }
-            $this->setStateName((string) $user->max_id, 'await_confirm', ['items' => $items, 'last_bot_msg' => null]);
-
-            $this->renderEditor($chatId, $state['msg_id'] ?? null, $items);
-
-            return;
-        }
-
-        $this->sendTransient((string) $user->max_id, $chatId, 'Не понял. /menu — меню.');
+        return true;
     }
 
     /**
-     * Извлекает URL изображения из attachments входящего сообщения.
+     * Извлекает [callbackId, payload] из callback (внутри update.callback.*).
      *
-     * @param  array  $message  Объект message
+     * @param  array  $update  Полный webhook-update
+     * @return array{0:string,1:string} [callbackId, payload]
+     */
+    protected function extractCallback(array $update): array
+    {
+        $cb = $update['callback'] ?? [];
+
+        return [$cb['callback_id'] ?? '', $cb['payload'] ?? ''];
+    }
+
+    /**
+     * Извлекает текст из message (message.body.text).
+     *
+     * @param  array  $message  Объект сообщения
+     */
+    protected function extractText(array $message): string
+    {
+        return (string) ($message['body']['text'] ?? '');
+    }
+
+    /**
+     * Извлекает URL изображения из attachments. msg_id всегда null: MAX-бот не может
+     * удалить скрин пользователя, поэтому photo_msg_id не сохраняется.
+     *
+     * @param  array  $message  Объект сообщения
+     * @return array|null ['source'=>URL,'msg_id'=>null] или null
+     */
+    protected function extractPhoto(array $message): ?array
+    {
+        $url = $this->extractPhotoUrl($message);
+        if ($url === null) {
+            return null;
+        }
+
+        return ['source' => $url, 'msg_id' => null];
+    }
+
+    /**
+     * Извлекает прямой URL картинки из attachments входящего сообщения (CDN, без авторизации).
+     *
+     * @param  array  $message  Объект сообщения
      * @return string|null Прямой URL картинки или null
      */
     private function extractPhotoUrl(array $message): ?string
@@ -235,719 +218,91 @@ class MaxConversationService
     }
 
     /**
-     * Отправка меню с приветствием и кнопкой «Обновить кешбэк».
+     * Извлекает id сообщения. Для MAX не используется (бот не удаляет чужие сообщения).
      *
-     * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
+     * @param  array  $message  Объект сообщения
      */
-    private function sendMenu(int|string $chatId, User $user): void
+    protected function extractMessageId(array $message): int|string|null
     {
-        $count = Card::where('user_id', $user->id)->count();
-        $keyboard = [[
-            ['type' => 'callback', 'text' => 'Обновить кешбэк', 'payload' => 'cmd:update'],
-        ]];
-
-        $this->sendTransient((string) $user->max_id, $chatId, 'Привет, '.e($user->name)."! Карт: {$count}.", $keyboard);
-        $this->setStateName((string) $user->max_id, 'idle');
+        return null;
     }
 
     /**
-     * Отправка inline-клавиатуры с картами пользователя.
+     * Содержит ли message document. MAX присылает скрины только как image-attachment.
      *
-     * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
+     * @param  array  $message  Объект сообщения
      */
-    private function sendCardKeyboard(int|string $chatId, User $user): void
+    protected function hasDocument(array $message): bool
     {
-        $cards = Card::where('user_id', $user->id)->get();
-
-        if ($cards->isEmpty()) {
-            $this->sendTransient((string) $user->max_id, $chatId, 'У тебя нет карт. Добавь карту в ЛК '.config('app.name').'.');
-            $this->setStateName((string) $user->max_id, 'idle');
-
-            return;
-        }
-
-        $keyboard = [];
-        foreach ($cards as $card) {
-            $bankTitle = $card->bank?->title ?? 'Без банка';
-            $cardNumber = $card->number;
-            $keyboard[][] = [
-                'type' => 'callback',
-                'text' => "{$bankTitle} {$cardNumber}",
-                'payload' => 'card:'.$card->id,
-            ];
-        }
-
-        $this->sendTransient((string) $user->max_id, $chatId, 'Выбери карту:', $keyboard);
-        $this->setStateName((string) $user->max_id, 'await_card');
+        return false;
     }
 
     /**
-     * Обработка callback (нажатие inline-кнопки).
+     * Скачивает фото по прямому URL во временный файл (WebP→JPEG — в транспорте).
      *
-     * @param  array  $update  Полный update (с callback_id и payload)
-     * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
+     * @param  string  $source  URL фото (CDN)
+     * @return string|null Путь к локальному файлу или null при ошибке
      */
-    private function handleCallback(array $update, int|string $chatId, User $user): void
+    protected function downloadPhoto(string $source): ?string
     {
-        // РЕАЛЬНЫЙ формат MAX: callback_id и payload лежат внутри update.callback.*
-        $cb = $update['callback'] ?? [];
-        if (! empty($cb['callback_id'])) {
-            $this->bot->answerCallback($cb['callback_id']);
-        }
-
-        $data = $cb['payload'] ?? '';
-
-        if ($data === 'cmd:update') {
-            $this->sendCardKeyboard($chatId, $user);
-
-            return;
-        }
-
-        // «Проверить» на сообщении о привязке: если юзер уже привязался в ЛК,
-        // верхний lookup в handle() найдёт его и попадёт сюда — пускаем в бот.
-        if ($data === 'cmd:recheck') {
-            $this->sendMenu($chatId, $user);
-
-            return;
-        }
-
-        if (str_starts_with($data, 'card:')) {
-            $cardId = (int) substr($data, 5);
-
-            // Проверяем, что карта принадлежит пользователю (user-scoping)
-            $card = Card::where('id', $cardId)->where('user_id', $user->id)->first();
-            if ($card === null) {
-                $this->bot->sendMessage($chatId, 'Карта не найдена.');
-
-                return;
-            }
-
-            $label = e(($card->bank?->title ?? 'Без банка').' '.$card->number);
-            $this->sendTransient((string) $user->max_id, $chatId, "Пришли скриншот категорий кешбэка по карте {$label} 📸\nИли введи их текстом — по одной в строке «Категория процент».\n\nПримеры:\n• Аптеки 5\n• Кафе 3,5\n• Аптеки 5 только 03\n\nНужна отдельная категория, хотя похожая уже есть? Начни строку с «+»:\n• +Кафе 5");
-            $this->setStateName((string) $user->max_id, 'await_photo', ['card_id' => $cardId]);
-
-            return;
-        }
-
-        if ($data === 'merge' || $data === 'replace' || $data === 'cancel') {
-            $this->handleConfirm($data, $chatId, $user);
-
-            return;
-        }
-
-        // Алиасы для обратной совместимости
-        if ($data === 'save' || $data === 'apply') {
-            $this->handleConfirm('merge', $chatId, $user);
-
-            return;
-        }
-
-        if (str_starts_with($data, 'edit:')) {
-            $index = (int) substr($data, 5);
-            $this->sendTransient((string) $user->max_id, $chatId, "Пришли «название процент» — можно дописать примечание через пробел.\n\nПримеры:\n• Аптеки 5\n• Аптеки 5 только 03\n• +Кафе 5 (отдельная категория)");
-            $this->setStateName((string) $user->max_id, 'await_edit', ['index' => $index]);
-
-            return;
-        }
-
-        if (str_starts_with($data, 'del:')) {
-            $index = (int) substr($data, 4);
-            $state = $this->state($user->max_id);
-
-            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
-                array_splice($state['items'], $index, 1);
-                $this->setState((string) $user->max_id, 'await_confirm', $state);
-                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items']);
-            }
-
-            return;
-        }
-
-        if (str_starts_with($data, 'note:')) {
-            $index = (int) substr($data, 5);
-            $state = $this->state($user->max_id);
-
-            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
-                $title = e($state['items'][$index]['title'] ?? '');
-                $this->sendTransient((string) $user->max_id, $chatId, "Пришли примечание для «{$title}» (MCC код или условие). /skip — убрать примечание.");
-                $this->setStateName((string) $user->max_id, 'await_note', ['index' => $index]);
-            }
-
-            return;
-        }
-
-        if ($data === 'add') {
-            $this->sendTransient((string) $user->max_id, $chatId, "Пришли «название процент» — можно дописать примечание через пробел.\n\nПримеры:\n• Кафе 3.5\n• Аптеки 5 только 03\n• +Кафе 5 (отдельная категория)");
-            $this->setStateName((string) $user->max_id, 'await_add');
-
-            return;
-        }
+        return $this->bot->downloadPhoto($source);
     }
 
     /**
-     * Обработка фото: скачивание, распознавание, построение редактора.
+     * Отправляет сообщение через MAX API.
      *
-     * @param  array  $message  Объект message с фото
-     * @param  string  $photoUrl  URL изображения (CDN, без авторизации)
-     * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
-     */
-    private function processPhotos(array $message, string $photoUrl, int|string $chatId, User $user): void
-    {
-        $state = $this->state($user->max_id);
-        $cardId = $state['card_id'] ?? null;
-
-        if ($cardId === null) {
-            $this->sendMenu($chatId, $user);
-
-            return;
-        }
-
-        // Rate-limit: каждое фото = платный запрос к GigaChat, ≤5/мин
-        $rlKey = "bot.rl.photo.max.{$user->max_id}";
-        $count = (int) Cache::get($rlKey, 0);
-        if ($count >= 5) {
-            // ⚠️ MAX: фото пользователя НЕ удаляем
-            $this->sendTransient((string) $user->max_id, $chatId, 'Слишком много скринов за минуту. Подожди немного.');
-
-            return;
-        }
-        Cache::put($rlKey, $count + 1, 60);
-
-        $path = $this->bot->downloadPhoto($photoUrl);
-
-        if ($path === null) {
-            $this->sendTransient((string) $user->max_id, $chatId, 'Не удалось скачать фото.');
-
-            return;
-        }
-
-        // Сохраняем скриншот в карту (public/card_cashback_image/ — тот же путь, что читает веб и AiService)
-        $imageFilename = 'card_'.uniqid('', true).'.jpg';
-        Storage::disk('public')->put('card_cashback_image/'.$imageFilename, file_get_contents($path));
-
-        // Индикатор долгой операции (GigaChat отвечает не сразу)
-        $this->bot->sendChatAction($chatId, 'typing');
-        $this->sendTransient((string) $user->max_id, $chatId, '⏳ Распознаю скриншот…');
-
-        try {
-            $result = $this->import->import($user->id, $cardId, [$path]);
-        } finally {
-            @unlink($path);
-        }
-
-        // items: ✅ существующие категории + 🆕 новые (category_id=null)
-        $items = collect($result['saved'])->map(fn ($s) => [
-            'title' => $s['title'],
-            'percent' => (float) $s['percent'],
-            'category_id' => $s['category_id'],
-        ])->values()->all();
-
-        foreach ($result['skipped'] as $skip) {
-            $items[] = [
-                'title' => $skip['title'],
-                'percent' => (float) ($skip['percent'] ?? 0),
-                'category_id' => null,
-            ];
-        }
-
-        // Cleanup транзитного промпта «Пришли скриншот» (СВОЁ сообщение)
-        $currentState = $this->state((string) $user->max_id);
-        if (! empty($currentState['last_bot_msg'])) {
-            $this->bot->deleteMessage($chatId, $currentState['last_bot_msg']);
-        }
-
-        $messageId = $this->renderEditor($chatId, null, $items);
-
-        $this->setState((string) $user->max_id, 'await_confirm', [
-            'card_id' => $cardId,
-            'image' => $imageFilename,
-            'items' => $items,
-            'msg_id' => $messageId,
-            'last_bot_msg' => null,
-        ]);
-    }
-
-    /**
-     * Парсит текстовый список категорий (по строкам «Категория процент») и открывает редактор.
-     *
-     * Валидные строки попадают в редактор (с category_id: ✅ своя / 🆕 новая),
-     * невалидные — отдельным сообщением «Не понял строки». Если не распознано ни одной
-     * строки — показываем пример формата и остаёмся в await_photo. Домен (image, фото-референс)
-     * не используется: это альтернативный путь ввода без скриншота.
-     *
-     * @param  string  $text  Многострочный ввод пользователя
-     * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
-     */
-    private function processTextList(string $text, int|string $chatId, User $user): void
-    {
-        $state = $this->state($user->max_id);
-        $cardId = $state['card_id'] ?? null;
-
-        if ($cardId === null) {
-            $this->sendTransient((string) $user->max_id, $chatId, 'Сессия истекла. /menu');
-            $this->setState((string) $user->max_id, 'idle');
-
-            return;
-        }
-
-        $items = [];
-        $invalid = [];
-        // Категории пользователя грузятся ОДИН раз — attachCategory работает по коллекции,
-        // иначе был N+1 SELECT на каждую строку списка.
-        $categories = $this->userCategories($user->id);
-        foreach (preg_split('/\r\n|\r|\n/', $text) as $line) {
-            $line = trim($line);
-            if ($line === '') {
-                continue;
-            }
-            $parsed = self::parseItem($line);
-            if ($parsed === null) {
-                $invalid[] = $line;
-
-                continue;
-            }
-            $parsed = $this->attachCategory($parsed, $categories);
-            $items[] = $parsed;
-        }
-
-        // Ничего не распознали — не открываем пустой редактор, подсказываем формат
-        if (empty($items)) {
-            $this->sendTransient((string) $user->max_id, $chatId, "Не получилось распознать категории.\n\nФормат — по одной в строке «Категория процент». Примеры:\n• Аптеки 5\n• Кафе 3,5\n• +Кафе 5 (отдельная категория)");
-
-            return;
-        }
-
-        // Cleanup транзитного промпта «Пришли скриншот …» (СВОЁ сообщение — можно удалить)
-        $currentState = $this->state((string) $user->max_id);
-        if (! empty($currentState['last_bot_msg'])) {
-            $this->bot->deleteMessage($chatId, $currentState['last_bot_msg']);
-        }
-
-        // Редактор (НЕ транзитное — живёт в msg_id). image/photo_msg_id НЕ кладём: текстовый путь.
-        $messageId = $this->renderEditor($chatId, null, $items);
-
-        $this->setState((string) $user->max_id, 'await_confirm', [
-            'card_id' => $cardId,
-            'items' => $items,
-            'msg_id' => $messageId,
-            'last_bot_msg' => null,
-        ]);
-
-        // Невалидные строки — отдельной подсказкой (sendTransient запишет last_bot_msg поверх null)
-        if (! empty($invalid)) {
-            $this->sendTransient(
-                (string) $user->max_id,
-                $chatId,
-                'Не понял строки: '.implode(' | ', array_map(fn ($l) => '«'.e($l).'»', $invalid))
-            );
-        }
-    }
-
-    /**
-     * Подтверждение или отмена применения кешбэка.
-     *
-     * @param  string  $action  'merge', 'replace' или 'cancel'
-     * @param  int|string  $chatId  ID чата
-     * @param  User  $user  Пользователь
-     */
-    private function handleConfirm(string $action, int|string $chatId, User $user): void
-    {
-        $state = $this->state($user->max_id);
-
-        if (($state['name'] ?? null) !== 'await_confirm') {
-            $this->sendTransient((string) $user->max_id, $chatId, 'Сессия истекла. /menu');
-            $this->setState((string) $user->max_id, 'idle');
-
-            return;
-        }
-
-        $cardId = (int) ($state['card_id'] ?? 0);
-        $items = $state['items'] ?? [];
-
-        // Пустой список при сохранении — применять нечего, остаёмся в редакторе
-        if (($action === 'merge' || $action === 'replace') && empty($items)) {
-            $this->sendTransient((string) $user->max_id, $chatId, 'Список пуст. Добавь категорию (➕) или нажми «Отменить».');
-
-            return;
-        }
-
-        // Отмена
-        if ($action === 'cancel') {
-            if (! empty($state['image'])) {
-                Storage::disk('public')->delete('card_cashback_image/'.$state['image']);
-            }
-            $this->clearEditorMessages($chatId, $state);
-            $this->sendTransient((string) $user->max_id, $chatId, 'Отменено.');
-            $this->setState((string) $user->max_id, 'idle');
-
-            return;
-        }
-
-        // merge / replace
-        if (in_array($action, ['merge', 'replace'], true) && $cardId > 0 && ! empty($items)) {
-            $raw = array_map(fn ($it) => [
-                'category' => $it['title'],
-                'cashback' => $it['percent'],
-                'mcc' => $it['mcc'] ?? '',
-            ], $items);
-
-            $card = Card::where('id', $cardId)->where('user_id', $user->id)->first();
-            if (! $card) {
-                $this->sendTransient((string) $user->max_id, $chatId, 'Карта не найдена.');
-                $this->setState((string) $user->max_id, 'idle');
-
-                return;
-            }
-
-            // Атомарно: удаление старых категорий (replace) + image + apply. Если apply упадёт,
-            // БД откатится — не останемся с «голой» картой (старое стёрто, новое не записано).
-            $applyResult = DB::transaction(function () use ($action, $cardId, $card, $state, $user, $raw) {
-                if ($action === 'replace') {
-                    \App\Models\Cashback::where('card_id', $cardId)->delete();
-                }
-
-                // Сохраняем изображение в карту
-                if (isset($state['image'])) {
-                    if (! empty($card->cashback_image) && $card->cashback_image !== $state['image']) {
-                        Storage::disk('public')->delete('card_cashback_image/'.$card->cashback_image);
-                    }
-                    $card->cashback_image = $state['image'];
-                    $card->save();
-                }
-
-                return $this->import->apply($user->id, $cardId, $raw);
-            });
-            $created = $applyResult['created'] ?? [];
-
-            // Cleanup: удаляем редактор (СВОЁ сообщение). Скрин юзера не трогаем (MAX).
-            $this->clearEditorMessages($chatId, $state);
-
-            $count = count($raw);
-            $newPart = $created !== []
-                ? ' ('.count($created).' нов.: '.implode(', ', $created).')'
-                : '';
-            $msg = $action === 'merge'
-                ? ($count > 0 ? "Готово! Добавил/обновил {$count} категорий{$newPart}." : 'Готово! Список был пуст.')
-                : ($count > 0 ? "Готово! Старые удалены, записано {$count} категорий{$newPart}." : 'Готово! Список был пуст.');
-            $this->sendTransient((string) $user->max_id, $chatId, $msg);
-
-            $this->setState((string) $user->max_id, 'idle');
-
-            return;
-        }
-
-        $this->sendTransient((string) $user->max_id, $chatId, 'Ошибка применения. /menu');
-        $this->setState((string) $user->max_id, 'idle');
-    }
-
-    /**
-     * Формирует текст редактора с распознанными категориями (✅/🆕).
-     *
-     * @param  array  $items  Элементы [['title'=>string,'percent'=>float,'category_id'=>?int], ...]
-     * @return string HTML-текст
-     */
-    private function buildEditorText(array $items): string
-    {
-        if (empty($items)) {
-            return 'Список пуст. Нажми «➕ Добавить категорию».';
-        }
-
-        // Дубли: одинаковый category_id (не null) у нескольких пунктов — при сохранении
-        // останется только последний (last-wins в apply). Подсвечиваем ⚠️, чтобы потеря не была тихой.
-        $counts = array_count_values(array_filter(array_map(fn ($it) => $it['category_id'] ?? null, $items)));
-        $dupIds = array_keys(array_filter($counts, fn ($n) => $n > 1));
-
-        $lines = ['Проверь распознанное:'];
-        foreach ($items as $i => $item) {
-            $mark = empty($item['category_id']) ? '🆕' : '✅';
-            // e() обязательно: title/mcc из AI/ручного ввода, format=html — без экранирования рендер сломается.
-            $line = ($i + 1).'. '.$mark.' '.e($item['title']).' — '.$item['percent'].'%';
-            // Примечание (MCC/условие) — в той же строке, через «·», чтобы пункт занимал одну строку
-            if (! empty($item['mcc'])) {
-                $line .= ' · 📝 '.e($item['mcc']);
-            }
-            if (in_array($item['category_id'] ?? null, $dupIds, true)) {
-                $line .= ' ⚠️';
-            }
-            $lines[] = $line;
-        }
-
-        // Легенда внизу: ✅/🆕 — при наличии новой категории; ⚠️ — при наличии дублей category_id
-        $hasNew = false;
-        foreach ($items as $item) {
-            if (empty($item['category_id'])) {
-                $hasNew = true;
-                break;
-            }
-        }
-        if ($hasNew) {
-            $lines[] = '✅ — ваша категория, 🆕 — новая, будет создана';
-        }
-        if (! empty($dupIds)) {
-            $lines[] = '⚠️ — дублирующая категория, при сохранении останется последняя';
-        }
-
-        // Пустая строка между пунктами — визуальное разделение, чтобы список не сливался
-        return implode("\n\n", $lines);
-    }
-
-    /**
-     * Формирует inline-клавиатуру редактора в формате MAX (type=callback).
-     *
-     * @param  array  $items  Элементы
-     * @return array Массив строк кнопок MAX
-     */
-    private function buildEditorKeyboard(array $items): array
-    {
-        $keyboard = [];
-
-        // «Добавить категорию» — первой строкой
-        $keyboard[] = [['type' => 'callback', 'text' => '➕ Добавить категорию', 'payload' => 'add']];
-
-        foreach ($items as $i => $item) {
-            $title = $item['title'] ?? '';
-            $percent = $item['percent'] ?? 0;
-
-            if (mb_strlen($title) > 30) {
-                $title = mb_substr($title, 0, 30).'…';
-            }
-
-            $mark = empty($item['category_id']) ? '🆕' : '✅';
-            $editText = "{$mark} {$title} {$percent}%";
-
-            $keyboard[] = [
-                ['type' => 'callback', 'text' => $editText, 'payload' => 'edit:'.$i],
-                ['type' => 'callback', 'text' => '🗑', 'payload' => 'del:'.$i],
-                ['type' => 'callback', 'text' => '📝', 'payload' => 'note:'.$i],
-            ];
-        }
-
-        $keyboard[] = [['type' => 'callback', 'text' => '💾 Сохранить (добавить к старым)', 'payload' => 'merge']];
-        $keyboard[] = [['type' => 'callback', 'text' => '♻️ Заменить (удалить старые)', 'payload' => 'replace']];
-        $keyboard[] = [['type' => 'callback', 'text' => 'Отменить', 'payload' => 'cancel']];
-
-        return $keyboard;
-    }
-
-    /**
-     * Парсит «Название процент» → ['title', 'percent'] или null.
-     *
-     * @param  string  $text  Ввод пользователя (напр. «Аптеки 5», «Кафе 3.5» или «Аптеки 5 только 03»)
-     * @return array|null ['title'=>string,'percent'=>float,'mcc'=>string,'force_new'=>bool] (mcc='', force_new=false по умолчанию) или null
-     */
-    public static function parseItem(string $text): ?array
-    {
-        $text = trim($text);
-        if ($text === '') {
-            return null;
-        }
-
-        // Префикс «+» → принудительно новая категория: fuzzy-мэтчинг пропускается,
-        // точное совпадение (если есть) переиспользуется. Пр.: «+Кафе 5» при наличии
-        // «Кафе и рестораны» создаст отдельную «Кафе», не подменяя её.
-        $forceNew = false;
-        if (str_starts_with($text, '+')) {
-            $forceNew = true;
-            $text = ltrim(mb_substr($text, 1));
-            if ($text === '') {
-                return null;
-            }
-        }
-
-        // Формат: «название — пробел — процент (число, опц. %) — пробел — примечание».
-        // Процент = ПЕРВОЕ число в строке: тогда цифры в примечании (MCC-коды, «03», даты)
-        // не путаются с процентом. Пр.: «Аптеки 5 только 03» → title=Аптеки, percent=5, mcc=«только 03».
-        // Без модификатора 's': title (.+?) физически не может содержать перенос строки,
-        // иначе он попал бы в текст inline-кнопки и сломал рендер.
-        if (! preg_match('/^(.+?)\s+(\d+(?:[.,]\d+)?)%?\s*(.*)$/u', $text, $m)) {
-            return null;
-        }
-
-        $title = trim($m[1]);
-        $percent = (float) str_replace(',', '.', $m[2]);
-        $mcc = self::sanitizeNote($m[3]); // '' если после процента ничего нет
-
-        if ($title === '' || $percent <= 0 || $percent > 100) {
-            return null;
-        }
-
-        return ['title' => $title, 'percent' => $percent, 'mcc' => $mcc, 'force_new' => $forceNew];
-    }
-
-    /**
-     * Очищает примечание (MCC/условие): trim, без переносов/табов (ломают рендеринг кнопки и
-     * payload), обрезка до 255 символов (длина колонки mcc в БД).
-     *
-     * @param  string  $note  Сырой текст примечания
-     * @return string Очищенное примечание (может быть пустой строкой)
-     */
-    private static function sanitizeNote(string $note): string
-    {
-        $note = trim(str_replace(["\r", "\n", "\t"], ' ', $note));
-
-        return mb_substr($note, 0, 255);
-    }
-
-    /**
-     * Обновляет часть состояния, сохраняя имя и TTL.
-     *
-     * @param  string  $maxId  MAX ID пользователя
-     * @param  array  $patch  Патч для слияния
-     */
-    private function patchState(string $maxId, array $patch): void
-    {
-        $current = $this->state($maxId);
-        $merged = array_merge($current, $patch);
-        $name = $merged['name'] ?? 'idle';
-        unset($merged['name']);
-        $this->setState($maxId, $name, $merged);
-    }
-
-    /**
-     * Меняет имя состояния, сохраняя остальные данные (включая last_bot_msg).
-     *
-     * @param  string  $maxId  MAX ID пользователя
-     * @param  string  $name  Новое имя состояния
-     * @param  array  $extra  Доп. данные
-     */
-    private function setStateName(string $maxId, string $name, array $extra = []): void
-    {
-        $current = $this->state($maxId);
-        unset($current['name']);
-        $this->setState($maxId, $name, array_merge($current, $extra));
-    }
-
-    /**
-     * Отправляет транзитное (одноразовое) сообщение, удалив предыдущее транзитное.
-     * Редактор (msg_id) НЕ затрагивается.
-     *
-     * @param  string  $maxId  MAX ID пользователя
      * @param  int|string  $chatId  ID чата
      * @param  string  $text  Текст
-     * @param  array  $keyboard  Inline-клавиатура MAX
-     * @return int|string|null Message ID отправленного сообщения
+     * @param  array  $keyboard  Inline-клавиатура
+     * @return int|string|null Message ID отправленного сообщения (формат MAX «mid.000…») или null при ошибке
      */
-    private function sendTransient(string $maxId, int|string $chatId, string $text, array $keyboard = []): int|string|null
+    protected function sendMessage(int|string $chatId, string $text, array $keyboard = []): int|string|null
     {
-        $state = $this->state($maxId);
-        if (! empty($state['last_bot_msg'])) {
-            $this->bot->deleteMessage($chatId, $state['last_bot_msg']);
-        }
-
-        $msgId = $this->bot->sendMessage($chatId, $text, $keyboard);
-        $this->patchState($maxId, ['last_bot_msg' => $msgId]);
-
-        return $msgId;
-    }
-
-    /**
-     * Рендерит редактор: edit существующего сообщения или отправка нового.
-     *
-     * @param  int|string  $chatId  ID чата
-     * @param  int|string|null  $msgId  ID сообщения редактора (null — новое)
-     * @param  array  $items  Элементы редактора
-     * @return int|string|null Message ID нового сообщения или null при edit
-     */
-    private function renderEditor(int|string $chatId, int|string|null $msgId, array $items): int|string|null
-    {
-        $text = $this->buildEditorText($items);
-        $keyboard = $this->buildEditorKeyboard($items);
-
-        if ($msgId !== null) {
-            $this->bot->editMessageText($chatId, $msgId, $text, $keyboard);
-
-            return null;
-        }
-
         return $this->bot->sendMessage($chatId, $text, $keyboard);
     }
 
     /**
-     * Удаляет сообщение-редактор (cleanup при сохранении/отмене).
-     *
-     * ⚠️ Скрин пользователя (photo_msg_id) НЕ удаляется — MAX не позволяет боту
-     * удалять чужие сообщения в диалоге.
+     * Редактирует текст сообщения (редактор категорий).
      *
      * @param  int|string  $chatId  ID чата
-     * @param  array  $state  Состояние с msg_id
+     * @param  int|string  $msgId  ID сообщения (строка формата «mid.…»)
+     * @param  string  $text  Новый текст
+     * @param  array  $keyboard  Inline-клавиатура
      */
-    private function clearEditorMessages(int|string $chatId, array $state): void
+    protected function editMessageText(int|string $chatId, int|string $msgId, string $text, array $keyboard = []): void
     {
-        if (! empty($state['msg_id'])) {
-            $this->bot->deleteMessage($chatId, $state['msg_id']);
-        }
+        $this->bot->editMessageText($chatId, $msgId, $text, $keyboard);
     }
 
     /**
-     * Сопоставляет введённое название с категориями пользователя (fuzzy через
-     * CategoryMatcher) и проставляет category_id. При совпадении title заменяется
-     * на каноничный — это чинит точный apply-путь (ensureCategories) и показ в
-     * редакторе (✅ с честным названием). mcc/percent не затрагиваются.
+     * Удаляет сообщение бота.
      *
-     * @param  array  $parsed  Распарсенный пункт ['title'=>…,'percent'=>…,'mcc'=>…,'force_new'=>bool]
-     * @param  Collection<int, Category>  $categories  Категории пользователя (загружает вызывающая сторона).
-     * @return array Тот же пункт с дополненным 'category_id' и каноничным 'title'
+     * @param  int|string  $chatId  ID чата
+     * @param  int|string  $msgId  ID сообщения бота
      */
-    private function attachCategory(array $parsed, Collection $categories): array
+    protected function deleteMessage(int|string $chatId, int|string $msgId): void
     {
-        $matcher = new CategoryMatcher;
-
-        // force_new (маркер «+») → только точное совпадение, без fuzzy-подмены названия.
-        $matched = ! empty($parsed['force_new'])
-            ? $matcher->matchExact($parsed['title'], $categories)
-            : $matcher->match($parsed['title'], $categories);
-
-        if ($matched !== null) {
-            $parsed['category_id'] = $matched->id;
-            $parsed['title'] = $matched->title;
-        } else {
-            $parsed['category_id'] = null;
-        }
-
-        return $parsed;
+        $this->bot->deleteMessage($chatId, $msgId);
     }
 
     /**
-     * Категории пользователя для мэтчинга — один SELECT.
+     * Отвечает на callback (снимает «часики» с кнопки).
      *
-     * Вынесено отдельно, чтобы processTextList грузил коллекцию один раз (а не
-     * на каждую строку списка) и передавал в attachCategory.
-     *
-     * @return Collection<int, Category>
+     * @param  string  $callbackId  ID callback
      */
-    private function userCategories(int $userId): Collection
+    protected function answerCallback(string $callbackId): void
     {
-        return Category::query()
-            ->where('user_id', $userId)
-            ->orderBy('title')
-            ->get(['id', 'title', 'keywords']);
+        $this->bot->answerCallback($callbackId);
     }
 
     /**
-     * Получить состояние пользователя из кэша.
+     * Отправляет chat action («печатает…»).
      *
-     * @param  string  $maxId  MAX ID пользователя
-     * @return array Состояние с ключом 'name'
+     * @param  int|string  $chatId  ID чата
+     * @param  string  $action  Тип действия
      */
-    private function state(string $maxId): array
+    protected function sendChatAction(int|string $chatId, string $action): void
     {
-        return Cache::get("bot.state.max.{$maxId}", ['name' => 'idle']);
-    }
-
-    /**
-     * Установить состояние пользователя в кэше.
-     *
-     * @param  string  $maxId  MAX ID пользователя
-     * @param  string  $name  Название состояния
-     * @param  array  $extra  Дополнительные данные
-     */
-    private function setState(string $maxId, string $name, array $extra = []): void
-    {
-        Cache::put("bot.state.max.{$maxId}", array_merge(['name' => $name], $extra), self::STATE_TTL);
+        $this->bot->sendChatAction($chatId, $action);
     }
 }

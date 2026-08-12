@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\Bot\BotConversationService;
+use App\Services\Bot\TelegramConversationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 
@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Cache;
  * Контроллер для обработки Telegram webhook.
  *
  * Принимает update от Telegram Bot API через webhook.
- * Проверяет секретный токен и делегирует обработку в BotConversationService.
+ * Проверяет секретный токен и делегирует обработку в TelegramConversationService.
  */
 class TelegramWebhookController extends Controller
 {
@@ -18,7 +18,7 @@ class TelegramWebhookController extends Controller
      * Создать новый экземпляр контроллера.
      */
     public function __construct(
-        private BotConversationService $conversation
+        private TelegramConversationService $conversation
     ) {}
 
     /**

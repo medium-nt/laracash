@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Storage;
  * Транспорт к MAX Bot API (raw HTTP).
  *
  * Зеркало публичных сигнатур TelegramBotService, чтобы MaxConversationService
- * повторял логику BotConversationService 1-в-1 (отличия — только формат update/cleanup).
+ * повторял логику TelegramConversationService 1-в-1 (отличия — только формат update/cleanup).
  *
  * Ключевые отличия MAX от TG:
  *  - auth: header Authorization: <token> (БЕЗ "Bearer");

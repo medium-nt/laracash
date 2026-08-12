@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Services\Bot\BotConversationService;
+use App\Services\Bot\TelegramConversationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -24,10 +24,10 @@ final class TelegramPollCommand extends Command
     /**
      * Execute the console command.
      *
-     * @param  BotConversationService  $conv  Сервис обработки диалогов бота
+     * @param  TelegramConversationService  $conv  Сервис обработки диалогов бота
      * @return int Код завершения (0 - успех)
      */
-    public function handle(BotConversationService $conv): int
+    public function handle(TelegramConversationService $conv): int
     {
         $base = rtrim((string) config('tg.api_base'), '/').'/bot'.config('tg.token');
         $offset = 0;
