@@ -126,7 +126,18 @@ class MaxBotService
         $payload = $this->buildPayload($text, $keyboard);
 
         $query = http_build_query(['chat_id' => $chatId, 'message_id' => $messageId]);
-        $this->http()->put("{$this->base()}/messages?{$query}", $payload);
+        $response = $this->http()->put("{$this->base()}/messages?{$query}", $payload);
+
+        if (! $response->successful()) {
+            // [ДИАГНОСТИКА] зеркало TelegramBotService: editMessageText используется редактором
+            // категорий — тихий фейл = «кнопки обновились, текст нет». Теперь причина видна.
+            Log::warning('MAX editMessageText !ok', [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'status' => $response->status(),
+                'body' => mb_substr((string) $response->body(), 0, 300),
+            ]);
+        }
     }
 
     /**
