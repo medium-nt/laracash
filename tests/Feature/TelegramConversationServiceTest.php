@@ -387,7 +387,7 @@ test('callback del удаляет пункт', function () {
     });
 });
 
-test('callback edit переводит в await_edit', function () {
+test('callback edit работает как алиас cat (toggle active)', function () {
     $user = User::factory()->create(['telegram_id' => '42']);
 
     Cache::put('bot.state.42', [
@@ -410,11 +410,46 @@ test('callback edit переводит в await_edit', function () {
         ],
     ]);
 
-    // Проверяем, что состояние изменилось на await_edit
+    // edit:{i} теперь алиас cat:{i} — устанавливает active=i (развёрнут)
     $state = Cache::get('bot.state.42');
-    expect($state['name'])->toBe('await_edit')
-        ->and($state['index'])->toBe(0);
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['active'])->toBe(0);
 });
+
+test('edit alias with non-zero indices sets correct active (catch substr bug)', function (string $callbackData, int $expectedActive) {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 3 пунктами
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+            ['title' => 'Кино', 'percent' => 10.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(TelegramConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_edit',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => $callbackData,
+        ],
+    ]);
+
+    // active должен быть равен индексу (НЕ 0 из-за бага substr)
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBe($expectedActive);
+})->with([
+    'edit:1' => ['edit:1', 1],
+    'edit:2' => ['edit:2', 2],
+]);
 
 test('сообщение в состоянии await_edit обновляет элемент', function () {
     $user = User::factory()->create(['telegram_id' => '42']);
@@ -1093,4 +1128,86 @@ test('expands the active item with field rows', function () {
     // найти ряд, где есть del:0 — он же содержит cat:0 (Свернуть)
     $delRow = array_values(array_filter($kb, fn ($r) => in_array('del:0', array_column($r, 'callback_data'), true)))[0];
     expect(array_column($delRow, 'callback_data'))->toBe(['del:0', 'cat:0']);
+});
+
+test('toggles active item via cat callback and collapses on second tap', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 2 пунктами и msg_id
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Первый тап — разворот пункта 1
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb1',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cat:1',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBe(1);
+
+    // Повторный тап по cat:1 — сворачивание
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb2',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cat:1',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBeNull();
+});
+
+test('resets active when deleting an item', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 2 пунктами, msg_id и active=1
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+        'active' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Удаляем пункт 1 (развёрнутый)
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_del',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'del:1',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBeNull();
+    expect($state['items'])->toHaveCount(1); // пункт удалён
+    expect($state['items'][0]['title'])->toBe('Аптеки');
 });

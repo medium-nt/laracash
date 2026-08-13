@@ -311,11 +311,16 @@ abstract class AbstractBotConversationService
             return;
         }
 
-        // Обработка кнопок редактора
-        if (str_starts_with($data, 'edit:')) {
-            $index = (int) substr($data, 5);
-            $this->sendTransient($pid, $chatId, "Пришли «название процент» — можно дописать примечание через пробел.\n\nПримеры:\n• Аптеки 5\n• Аптеки 5 только 03\n• +Кафе 5 (отдельная категория)");
-            $this->setStateName($pid, 'await_edit', ['index' => $index]);
+        // Разворот/сворот пункта. edit:{i} — алиас cat:{i} для уже отправленных старых клавиатур.
+        if (str_starts_with($data, 'cat:') || str_starts_with($data, 'edit:')) {
+            $index = (int) substr($data, str_starts_with($data, 'edit:') ? 5 : 4);
+            $state = $this->state($pid);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $active = ($state['active'] ?? null) === $index ? null : $index;
+                $this->patchState($pid, ['active' => $active]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items'], $active);
+            }
 
             return;
         }
@@ -326,8 +331,9 @@ abstract class AbstractBotConversationService
 
             if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
                 array_splice($state['items'], $index, 1);
+                $state['active'] = null; // после удаления индексы сместились — сбрасываем разворот
                 $this->setState($pid, 'await_confirm', $state);
-                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items']);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items'], null);
             }
 
             return;

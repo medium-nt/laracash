@@ -278,8 +278,9 @@ Expected: FAIL — ветки `cat:` нет; `edit:` переводит в `awai
 
 ```php
 // Разворот/сворот пункта. edit:{i} — алиас cat:{i} для уже отправленных старых клавиатур.
+// Внимание: 'cat:' длиной 4, 'edit:' длиной 5 — смещение зависит от префикса.
 if (str_starts_with($data, 'cat:') || str_starts_with($data, 'edit:')) {
-    $index = (int) substr($data, 4); // 'cat:' и 'edit:' — обе длиной 4 символа
+    $index = (int) substr($data, str_starts_with($data, 'edit:') ? 5 : 4);
     $state = $this->state($pid);
 
     if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
@@ -624,4 +625,4 @@ git commit -m "style(bot): pint + зелёные тесты редактора �
 
 **Placeholder scan:** TBD/TODO нет. Все кодовые шаги содержат конкретный код.
 
-**Type consistency:** `buildEditorKeyboard(array, ?int)` / `renderEditor(..., ?int)` / `parseTitle(string): ?string` / `parsePercent(string): ?float` / `applyTitle(array, int, string, int): array` / `applyPercent(array, int, float): array` — едины во всех задачах. `active` (int|null) и `field` ('title'|'percent'|null) — едины. `substr($data, 4)` для `cat:`/`edit:`, `substr($data, 6)` для `edt_t:`/`edt_p:` — проверено по длине префиксов.
+**Type consistency:** `buildEditorKeyboard(array, ?int)` / `renderEditor(..., ?int)` / `parseTitle(string): ?string` / `parsePercent(string): ?float` / `applyTitle(array, int, string, int): array` / `applyPercent(array, int, float): array` — едины во всех задачах. `active` (int|null) и `field` ('title'|'percent'|null) — едины. `substr($data, str_starts_with($data, 'edit:') ? 5 : 4)` для `cat:`/`edit:` (длины 4/5), `substr($data, 6)` для `edt_t:`/`edt_p:` (длина 6) — проверено по длине префиксов.

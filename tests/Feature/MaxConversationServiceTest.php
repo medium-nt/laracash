@@ -218,7 +218,7 @@ test('callback del удаляет пункт и edit-ит редактор', fun
     Http::assertSent(fn ($r) => $r->method() === 'PUT' && str_contains($r->url(), '/messages'));
 });
 
-test('callback edit переводит в await_edit', function () {
+test('callback edit работает как алиас cat (toggle active)', function () {
     User::factory()->create(['max_id' => '42']);
 
     Cache::put('bot.state.max.42', [
@@ -231,10 +231,38 @@ test('callback edit переводит в await_edit', function () {
 
     app(MaxConversationService::class)->handle(maxCallback(42, 'edit:0'));
 
+    // edit:{i} теперь алиас cat:{i} — устанавливает active=i (развёрнут)
     $state = Cache::get('bot.state.max.42');
-    expect($state['name'])->toBe('await_edit')
-        ->and($state['index'])->toBe(0);
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['active'])->toBe(0);
 });
+
+test('edit alias with non-zero indices sets correct active (catch substr bug)', function (string $payload, int $expectedActive) {
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    $user = User::factory()->create(['max_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 3 пунктами
+    Cache::put('bot.state.max.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+            ['title' => 'Кино', 'percent' => 10.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(MaxConversationService::class)->handle(maxCallback(42, $payload, 100, 'cb_edit'));
+
+    // active должен быть равен индексу (НЕ 0 из-за бага substr)
+    $state = Cache::get('bot.state.max.42');
+    expect($state['active'])->toBe($expectedActive);
+})->with([
+    'edit:1' => ['edit:1', 1],
+    'edit:2' => ['edit:2', 2],
+]);
 
 test('сообщение в await_edit обновляет элемент', function () {
     User::factory()->create(['max_id' => '42']);
@@ -692,4 +720,63 @@ test('expands the active item with field rows', function () {
     // найти ряд, где есть del:0 — он же содержит cat:0 (Свернуть)
     $delRow = array_values(array_filter($kb, fn ($r) => in_array('del:0', array_column($r, 'payload'), true)))[0];
     expect(array_column($delRow, 'payload'))->toBe(['del:0', 'cat:0']);
+});
+
+test('toggles active item via cat callback and collapses on second tap', function () {
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    $user = User::factory()->create(['max_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 2 пунктами и msg_id
+    Cache::put('bot.state.max.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(MaxConversationService::class);
+
+    // Первый тап — разворот пункта 1
+    $service->handle(maxCallback(42, 'cat:1', 100, 'cb1'));
+
+    $state = Cache::get('bot.state.max.42');
+    expect($state['active'])->toBe(1);
+
+    // Повторный тап по cat:1 — сворачивание
+    $service->handle(maxCallback(42, 'cat:1', 100, 'cb2'));
+
+    $state = Cache::get('bot.state.max.42');
+    expect($state['active'])->toBeNull();
+});
+
+test('resets active when deleting an item', function () {
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    $user = User::factory()->create(['max_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 2 пунктами, msg_id и active=1
+    Cache::put('bot.state.max.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+        'active' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(MaxConversationService::class);
+
+    // Удаляем пункт 1 (развёрнутый)
+    $service->handle(maxCallback(42, 'del:1', 100, 'cb_del'));
+
+    $state = Cache::get('bot.state.max.42');
+    expect($state['active'])->toBeNull();
+    expect($state['items'])->toHaveCount(1); // пункт удалён
+    expect($state['items'][0]['title'])->toBe('Аптеки');
 });
