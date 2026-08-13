@@ -979,15 +979,19 @@ abstract class AbstractBotConversationService
 
     /**
      * Парсит отдельное поле «процент»: первое число в вводе, запятая→точка.
-     * null — если числа нет. 0 допустим (= «нет кешбэка», при сохранении пропускается).
+     * null — если числа нет или > 100. 0 допустим (= «нет кешбэка», при сохранении пропускается).
      *
      * @param  string  $text  Сырой ввод процента
-     * @return float|null Процент либо null при отсутствии числа
+     * @return float|null Процент либо null при отсутствии числа или значении > 100
      */
     protected static function parsePercent(string $text): ?float
     {
         if (preg_match('/(\d+(?:[.,]\d+)?)/', $text, $m)) {
-            return (float) str_replace(',', '.', $m[1]);
+            $percent = (float) str_replace(',', '.', $m[1]);
+            if ($percent > 100) {
+                return null;
+            }
+            return $percent;
         }
 
         return null;

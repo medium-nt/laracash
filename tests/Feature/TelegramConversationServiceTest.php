@@ -1456,3 +1456,63 @@ test('await_note returns to await_confirm with the item expanded', function () {
     expect($state['active'])->toBe(0);                 // пункт развёрнут после правки примечания
     expect($state['items'][0]['mcc'])->toBe('MCC5812');
 });
+
+test('switches active from one item to another (cat:j with j≠i)', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 3 пунктами, active=0 (развёрнут первый)
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+            ['title' => 'Кино', 'percent' => 10.0],
+        ],
+        'msg_id' => 1,
+        'active' => 0,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Тап по cat:2 → должен переключить active с 0 на 2
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_switch',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cat:2',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBe(2); // switched to item 2
+});
+
+test('truncates long title in button label to 30 chars with ellipsis', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+
+    // Title длиннее 30 символов (40 символов)
+    $longTitle = 'Очень длинное название категории которое должно быть обрезано';
+    $kb = $method->invoke($service, [
+        ['title' => $longTitle, 'percent' => 5.0, 'category_id' => 1],
+    ]);
+
+    // Находим кнопку cat:0
+    $flatButtons = collect($kb)->flatten(1)->keyBy('callback_data');
+    $buttonText = $flatButtons->get('cat:0')['text'];
+
+    // Проверяем наличие "…" в тексте кнопки
+    expect($buttonText)->toContain('…');
+
+    // Извлекаем title-часть (between mark and percent)
+    preg_match('/^✅\s*(.+?)\s+5%$/', $buttonText, $matches);
+    $titleInButton = $matches[1] ?? '';
+
+    // Длина title в кнопке должна быть ≤ 31 (30 + "…" уже учтена в тексте)
+    expect(mb_strlen($titleInButton))->toBeLessThanOrEqual(31);
+});
