@@ -194,8 +194,8 @@ abstract class AbstractBotConversationService
                 if (! empty($state['last_bot_msg'])) {
                     $this->deleteMessage($chatId, $state['last_bot_msg']);
                 }
-                $this->setStateName($pid, 'await_confirm', ['items' => $items, 'last_bot_msg' => null]);
-                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items);
+                $this->setStateName($pid, 'await_confirm', ['items' => $items, 'last_bot_msg' => null, 'active' => $index]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items, $index);
             }
 
             return;
@@ -203,6 +203,41 @@ abstract class AbstractBotConversationService
 
         // Обработка состояний редактора (правка/добавление пункта)
         if ($state['name'] === 'await_edit' || $state['name'] === 'await_add') {
+            $index = $state['index'] ?? null;
+            $field = $state['field'] ?? null; // только для await_edit (новая схема полей)
+            $items = $state['items'] ?? [];
+
+            // Правка отдельного поля (Название / Процент) из развёрнутого пункта
+            if ($state['name'] === 'await_edit' && $field !== null && $index !== null && isset($items[$index])) {
+                if ($field === 'title') {
+                    $title = self::parseTitle($text);
+                    if ($title === null) {
+                        $this->sendTransient($pid, $chatId, 'Не понял название. Пришли слово или фразу, например «Аптеки».');
+
+                        return;
+                    }
+                    $items = $this->applyTitle($items, $index, $title, $user->id);
+                } else { // field === 'percent'
+                    $percent = self::parsePercent($text);
+                    if ($percent === null) {
+                        $this->sendTransient($pid, $chatId, 'Не понял процент. Пришли число, например «5» или «3,5».');
+
+                        return;
+                    }
+                    $items = $this->applyPercent($items, $index, $percent);
+                }
+
+                // Cleanup транзитного промпта правки; пункт остаётся развёрнут (active=index)
+                if (! empty($state['last_bot_msg'])) {
+                    $this->deleteMessage($chatId, $state['last_bot_msg']);
+                }
+                $this->setStateName($pid, 'await_confirm', ['items' => $items, 'last_bot_msg' => null, 'active' => $index]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items, $index);
+
+                return;
+            }
+
+            // Legacy-путь: полная строка «название процент [mcc]» (await_add и await_edit без field)
             $parsed = self::parseItem($text);
 
             if ($parsed === null) {
@@ -215,9 +250,7 @@ abstract class AbstractBotConversationService
             $parsed = $this->attachCategory($parsed, $this->userCategories($user->id));
 
             // Применяем правку к items
-            $items = $state['items'] ?? [];
             if ($state['name'] === 'await_edit') {
-                $index = $state['index'] ?? null;
                 if ($index !== null && isset($items[$index])) {
                     // Если юзер не дописал примечание (mcc='') — сохраняем прежнее,
                     // иначе правка процента «Аптеки 7» затёрла бы уже заданный MCC.
@@ -334,6 +367,34 @@ abstract class AbstractBotConversationService
                 $state['active'] = null; // после удаления индексы сместились — сбрасываем разворот
                 $this->setState($pid, 'await_confirm', $state);
                 $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items'], null);
+            }
+
+            return;
+        }
+
+        // Правка названия пункта
+        if (str_starts_with($data, 'edt_t:')) {
+            $index = (int) substr($data, 6);
+            $state = $this->state($pid);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $title = e($state['items'][$index]['title'] ?? '');
+                $this->sendTransient($pid, $chatId, "Пришли новое название для «{$title}»:");
+                $this->setStateName($pid, 'await_edit', ['index' => $index, 'field' => 'title']);
+            }
+
+            return;
+        }
+
+        // Правка процента пункта
+        if (str_starts_with($data, 'edt_p:')) {
+            $index = (int) substr($data, 6);
+            $state = $this->state($pid);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $title = e($state['items'][$index]['title'] ?? '');
+                $this->sendTransient($pid, $chatId, "Пришли новый процент для «{$title}» (например, 5 или 3,5):");
+                $this->setStateName($pid, 'await_edit', ['index' => $index, 'field' => 'percent']);
             }
 
             return;
@@ -902,6 +963,74 @@ abstract class AbstractBotConversationService
         }
 
         return $parsed;
+    }
+
+    /**
+     * Парсит отдельное поле «название»: trim, без переносов/табов (ломают кнопку),
+     * обрезка до 255 символов. null — если пусто.
+     *
+     * @param  string  $text  Сырой ввод названия
+     * @return string|null Очищенное название либо null при пустом вводе
+     */
+    protected static function parseTitle(string $text): ?string
+    {
+        $title = trim(str_replace(["\r", "\n", "\t"], ' ', $text));
+
+        if ($title === '') {
+            return null;
+        }
+
+        return mb_substr($title, 0, 255);
+    }
+
+    /**
+     * Парсит отдельное поле «процент»: первое число в вводе, запятая→точка.
+     * null — если числа нет. 0 допустим (= «нет кешбэка», при сохранении пропускается).
+     *
+     * @param  string  $text  Сырой ввод процента
+     * @return float|null Процент либо null при отсутствии числа
+     */
+    protected static function parsePercent(string $text): ?float
+    {
+        if (preg_match('/(\d+(?:[.,]\d+)?)/', $text, $m)) {
+            return (float) str_replace(',', '.', $m[1]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Применяет новое название к пункту и пересопоставляет категорию (название — ключ мэтчинга):
+     * обновляются title (каноничный) и category_id; маркер может смениться ✅↔🆕. Процент/MCC не трогаются.
+     *
+     * @param  array  $items  Текущие пункты редактора
+     * @param  int  $index  Индекс правимого пункта
+     * @param  string  $title  Новое название
+     * @param  int  $userId  ID пользователя (для загрузки категорий мэтчинга)
+     * @return array Обновлённые пункты
+     */
+    protected function applyTitle(array $items, int $index, string $title, int $userId): array
+    {
+        $resolved = $this->attachCategory(['title' => $title, 'force_new' => false], $this->userCategories($userId));
+        $items[$index]['title'] = $resolved['title'];
+        $items[$index]['category_id'] = $resolved['category_id'];
+
+        return $items;
+    }
+
+    /**
+     * Применяет новый процент к пункту. Категория и название не затрагиваются.
+     *
+     * @param  array  $items  Текущие пункты редактора
+     * @param  int  $index  Индекс правимого пункта
+     * @param  float  $percent  Новый процент
+     * @return array Обновлённые пункты
+     */
+    protected function applyPercent(array $items, int $index, float $percent): array
+    {
+        $items[$index]['percent'] = $percent;
+
+        return $items;
     }
 
     /**

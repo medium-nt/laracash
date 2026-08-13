@@ -1211,3 +1211,248 @@ test('resets active when deleting an item', function () {
     expect($state['items'])->toHaveCount(1); // пункт удалён
     expect($state['items'][0]['title'])->toBe('Аптеки');
 });
+
+test('edt_t callback enters await_edit with field=title and updates title with re-match', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Создаём категорию «Аптеки» для пользователя
+    \App\Models\Category::create([
+        'user_id' => $user->id,
+        'title' => 'Аптеки',
+        'keywords' => 'аптека',
+    ]);
+
+    // Подготовка: пользователь в await_confirm с пунктом «Рестораны» (category_id=null, 🆕)
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Тап «Название» пункта 0
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_t',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_t:0',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit');
+    expect($state['index'])->toBe(0);
+    expect($state['field'])->toBe('title');
+
+    // Ввод нового названия «Аптеки» (существующая категория)
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'Аптеки',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm');
+    expect($state['active'])->toBe(0);                  // пункт остался развёрнут
+    expect($state['items'][0]['title'])->toBe('Аптеки');
+    expect($state['items'][0]['category_id'])->not->toBeNull(); // категория пересопоставлена → ✅
+});
+
+test('edt_p callback enters await_edit with field=percent and updates percent', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_p',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_p:0',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['field'])->toBe('percent');
+
+    // Процент с запятой нормализуется
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '3,5',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['items'][0]['percent'])->toBe(3.5);
+});
+
+test('edt_p callback parses integer percent correctly', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_p',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_p:0',
+        ],
+    ]);
+
+    // Целый процент
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '15',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['items'][0]['percent'])->toBe(15.0);
+});
+
+test('rejects invalid percent input and stays in await_edit', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_p',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_p:0',
+        ],
+    ]);
+
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'не число',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit'); // остались ждать корректного ввода
+});
+
+test('rejects invalid title input and stays in await_edit', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_t',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_t:0',
+        ],
+    ]);
+
+    // Пустой ввод
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '   ',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit'); // остались ждать корректного ввода
+});
+
+test('await_note returns to await_confirm with the item expanded', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // note:0 → await_note, index=0
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_note',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'note:0',
+        ],
+    ]);
+
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'MCC5812',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm');
+    expect($state['active'])->toBe(0);                 // пункт развёрнут после правки примечания
+    expect($state['items'][0]['mcc'])->toBe('MCC5812');
+});
