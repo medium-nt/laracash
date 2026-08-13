@@ -8,6 +8,7 @@ use App\Services\Bot\MaxConversationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 
 uses(RefreshDatabase::class);
 
@@ -643,4 +644,282 @@ test('callback merge сохраняет примечание items в pivot', fu
 
     expect($cashback)->not->toBeNull()
         ->and($cashback->mcc)->toBe('5912');
+});
+
+test('/start генерирует search_token и отправляет меню с URL-кнопкой', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['max_id' => '42', 'name' => 'Иван']);
+
+    app(MaxConversationService::class)->handle(maxMessage(42, '/start'));
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Проверяем, что sendMessage отправлен с URL-кнопкой type='link'
+    Http::assertSent(function ($request) use ($user) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        // Обходим кнопки и ищем type='link'
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['type']) && $button['type'] === 'link') {
+                        // URL ведёт на /search/ и содержит токен юзера
+                        return str_contains($button['url'] ?? '', '/search/')
+                            && str_contains($button['url'] ?? '', $user->search_token)
+                            && str_contains($button['url'] ?? '', 'example.com');
+                    }
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('ИНВАРИАНТ: /start НЕ перегенерирует существующий search_token', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['max_id' => '42', 'name' => 'Иван']);
+    $user->search_token = 'fixedtoken789';
+    $user->save();
+
+    app(MaxConversationService::class)->handle(maxMessage(42, '/start'));
+
+    // search_token НЕ изменился
+    $user->refresh();
+    expect($user->search_token)->toBe('fixedtoken789');
+
+    // URL-кнопка содержит старый токен
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        // Обходим кнопки и ищем type='link' с фиксированным токеном
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['type']) && $button['type'] === 'link') {
+                        return str_contains($button['url'] ?? '', '/search/fixedtoken789');
+                    }
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('callback cmd:link генерирует search_token и отправляет ссылку', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['max_id' => '42', 'name' => 'Иван']);
+
+    app(MaxConversationService::class)->handle(maxCallback(42, 'cmd:link'));
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Проверяем, что отправлено сообщение с текстом содержащим /search/
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), '/messages')
+            && $request->method() === 'POST'
+            && str_contains($data['text'] ?? '', '/search/');
+    });
+
+    // Проверяем, что отправлено сообщение с URL-кнопкой type='link'
+    Http::assertSent(function ($request) use ($user) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        // Обходим кнопки и ищем type='link'
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['type']) && $button['type'] === 'link') {
+                        // URL содержит токен юзера
+                        return str_contains($button['url'] ?? '', $user->search_token);
+                    }
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('ИНВАРИАНТ: cmd:link НЕ перегенерирует существующий search_token', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['max_id' => '42', 'name' => 'Иван']);
+    $user->search_token = 'fixedtoken012';
+    $user->save();
+
+    app(MaxConversationService::class)->handle(maxCallback(42, 'cmd:link'));
+
+    // search_token НЕ изменился
+    $user->refresh();
+    expect($user->search_token)->toBe('fixedtoken012');
+
+    // Проверяем, что отправлено сообщение с текстом содержащим старый токен
+    Http::assertSent(function ($request) {
+        $data = $request->data();
+
+        return str_contains($request->url(), '/messages')
+            && $request->method() === 'POST'
+            && str_contains($data['text'] ?? '', '/search/fixedtoken012');
+    });
+
+    // URL-кнопка содержит старый токен
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        // Обходим кнопки и ищем type='link' с фиксированным токеном
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['type']) && $button['type'] === 'link') {
+                        return str_contains($button['url'] ?? '', '/search/fixedtoken012');
+                    }
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('/start на localhost НЕ добавляет URL-кнопку, но меню отправляется', function () {
+    // БЕЗ override app.url — по умолчанию localhost:8000 (не публичный)
+    $user = User::factory()->create(['max_id' => '42', 'name' => 'Иван']);
+
+    app(MaxConversationService::class)->handle(maxMessage(42, '/start'));
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Сообщение "Привет..." отправлено
+    Http::assertSent(fn ($r) => str_contains($r->url(), '/messages')
+        && str_contains($r->data()['text'] ?? '', 'Привет'));
+
+    // URL-кнопки НЕТ — проверяем через attachments
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        // Проверяем, что НЕТ кнопки с type='link'
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['type']) && $button['type'] === 'link') {
+                        return false; // Нашли link-кнопку — провал
+                    }
+                }
+            }
+        }
+
+        return true;
+    });
+
+    // Callback-кнопка "Прислать ссылку" (cmd:link) ЕСТЬ
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['payload']) && $button['payload'] === 'cmd:link') {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('cmd:link на localhost присылает ссылку текстом БЕЗ URL-кнопки', function () {
+    // БЕЗ override app.url — по умолчанию localhost:8000 (не публичный)
+    $user = User::factory()->create(['max_id' => '42', 'name' => 'Иван']);
+
+    app(MaxConversationService::class)->handle(maxCallback(42, 'cmd:link'));
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Текст сообщения содержит /search/
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', '/search/');
+    });
+
+    // URL-кнопки НЕТ
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), '/messages')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $attachments = $data['attachments'] ?? [];
+
+        // Проверяем, что НЕТ кнопки с type='link'
+        foreach ($attachments as $attachment) {
+            $buttons = $attachment['payload']['buttons'] ?? [];
+            foreach ($buttons as $row) {
+                foreach ($row as $button) {
+                    if (isset($button['type']) && $button['type'] === 'link') {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    });
 });

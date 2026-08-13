@@ -98,6 +98,18 @@ final class TelegramConversationService extends AbstractBotConversationService
     }
 
     /**
+     * Формирует inline URL-кнопку в формате Telegram API (открывает ссылку).
+     *
+     * @param  string  $text  Текст кнопки
+     * @param  string  $url  URL, который откроется при нажатии
+     * @return array ['text'=>..,'url'=>..]
+     */
+    protected function makeUrlButton(string $text, string $url): array
+    {
+        return ['text' => $text, 'url' => $url];
+    }
+
+    /**
      * Извлекает chat id из Telegram-update.
      *
      * @param  array  $update  Полный webhook-update
