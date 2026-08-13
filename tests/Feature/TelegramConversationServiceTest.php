@@ -1045,3 +1045,52 @@ test('callback merge сохраняет примечание items в pivot', fu
     expect($cashback)->not->toBeNull()
         ->and($cashback->mcc)->toBe('5912');
 });
+
+test('builds editor keyboard with one wide category row per item and global buttons', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Супермаркеты', 'percent' => 5.0, 'category_id' => 1, 'mcc' => ''],
+        ['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null, 'mcc' => ''],
+    ]);
+
+    // Первая строка — «Добавить категорию»
+    expect($kb[0][0]['text'])->toContain('Добавить категорию');
+    expect($kb[0][0]['callback_data'])->toBe('add');
+
+    // Каждый пункт — ОДНА кнопка в ряду, callback cat:{i}
+    // Найдём кнопки по callback_data
+    $flatButtons = collect($kb)->flatten(1)->keyBy('callback_data');
+
+    expect($flatButtons->has('cat:0'))->toBeTrue();
+    expect($flatButtons->get('cat:0')['text'])->toContain('Супермаркеты')->toContain('5%')->toContain('✅');
+
+    expect($flatButtons->has('cat:1'))->toBeTrue();
+    expect($flatButtons->get('cat:1')['text'])->toContain('Рестораны')->toContain('10%')->toContain('🆕');
+
+    // Хвостовые глобальные кнопки без изменений
+    expect($flatButtons->has('merge'))->toBeTrue();
+    expect($flatButtons->has('replace'))->toBeTrue();
+    expect($flatButtons->has('cancel'))->toBeTrue();
+});
+
+test('expands the active item with field rows', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null, 'mcc' => ''],
+    ], 0);
+
+    $flatButtons = collect($kb)->flatten(1)->keyBy('callback_data');
+
+    expect($flatButtons->has('cat:0'))->toBeTrue();          // широкая кнопка активного пункта
+    expect($flatButtons->has('edt_t:0'))->toBeTrue();        // Название
+    expect($flatButtons->has('edt_p:0'))->toBeTrue();        // Процент
+    expect($flatButtons->has('note:0'))->toBeTrue();         // Примечание
+    expect($flatButtons->has('del:0'))->toBeTrue();         // Удалить (рядом со Свернуть)
+
+    // Последний ряд развёрнутого пункта — Удалить + Свернуть (2 кнопки), Свернуть = cat:0
+    // найти ряд, где есть del:0 — он же содержит cat:0 (Свернуть)
+    $delRow = array_values(array_filter($kb, fn ($r) => in_array('del:0', array_column($r, 'callback_data'), true)))[0];
+    expect(array_column($delRow, 'callback_data'))->toBe(['del:0', 'cat:0']);
+});

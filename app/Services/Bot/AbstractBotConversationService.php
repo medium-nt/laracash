@@ -752,14 +752,21 @@ abstract class AbstractBotConversationService
      * @param  array  $items  Элементы редактора
      * @return array Массив строк кнопок
      */
-    protected function buildEditorKeyboard(array $items): array
+    /**
+     * Формирует inline-клавиатуру редактора: каждая категория — одна широкая кнопка во весь ряд;
+     * активный (развёрнутый) пункт дополнительно раскрывает ряды полей (Название/Процент/Примечание/Удалить/Свернуть).
+     *
+     * @param  array  $items  Элементы [['title'=>string,'percent'=>float,'category_id'=>?int,'mcc'=>string], ...]
+     * @param  int|null  $active  Индекс развёрнутого пункта (null — всё свёрнуто)
+     * @return array Массив строк кнопок
+     */
+    protected function buildEditorKeyboard(array $items, ?int $active = null): array
     {
         $keyboard = [];
 
         // «Добавить категорию» — первой, чтобы всегда была под рукой
         $keyboard[] = [$this->makeButton('➕ Добавить категорию', 'add')];
 
-        // Кнопки редактирования и удаления для каждого элемента
         foreach ($items as $i => $item) {
             $title = $item['title'] ?? '';
             $percent = $item['percent'] ?? 0;
@@ -771,17 +778,27 @@ abstract class AbstractBotConversationService
 
             // Маркер статуса: ✅ — существующая категория, 🆕 — новая (будет создана)
             $mark = empty($item['category_id']) ? '🆕' : '✅';
-            $editText = "{$mark} {$title} {$percent}%";
 
-            $keyboard[] = [
-                $this->makeButton($editText, 'edit:'.$i),
-                $this->makeButton('🗑', 'del:'.$i),
-                $this->makeButton('📝', 'note:'.$i),
-            ];
+            // Широкая кнопка-категория во весь ряд (тап → разворот/сворот)
+            $keyboard[] = [$this->makeButton("{$mark} ".e($title)." {$percent}%", 'cat:'.$i)];
+
+            // Поля активного (развёрнутого) пункта — каждый ряд во всю ширину,
+            // кроме последнего (Удалить + Свернуть делит ряд пополам)
+            if ($i === $active) {
+                $keyboard[] = [$this->makeButton('✏️ Название: '.e($item['title'] ?? ''), 'edt_t:'.$i)];
+                $keyboard[] = [$this->makeButton('Процент: '.($item['percent'] ?? 0).'%', 'edt_p:'.$i)];
+                $noteLabel = ! empty($item['mcc'])
+                    ? '📝 Примечание: '.e($item['mcc'])
+                    : '📝 Примечание: (пусто)';
+                $keyboard[] = [$this->makeButton($noteLabel, 'note:'.$i)];
+                $keyboard[] = [
+                    $this->makeButton('🗑 Удалить', 'del:'.$i),
+                    $this->makeButton('✖ Свернуть', 'cat:'.$i),
+                ];
+            }
         }
 
-        // Кнопки сохранения — каждая на всю ширину своей строки,
-        // чтобы текст был виден полностью (в строке кнопки делят ширину поровну).
+        // Кнопки сохранения — каждая на всю ширину своей строки
         $keyboard[] = [$this->makeButton('💾 Сохранить (добавить к старым)', 'merge')];
         $keyboard[] = [$this->makeButton('♻️ Заменить (удалить старые)', 'replace')];
         $keyboard[] = [$this->makeButton('Отменить', 'cancel')];
@@ -984,12 +1001,13 @@ abstract class AbstractBotConversationService
      * @param  int|string  $chatId  ID чата
      * @param  int|string|null  $msgId  ID сообщения редактора (null — отправить новое)
      * @param  array  $items  Элементы редактора
+     * @param  int|null  $active  Индекс развёрнутого пункта (null — свёрнуто)
      * @return int|string|null Message ID нового сообщения или null при edit
      */
-    protected function renderEditor(int|string $chatId, int|string|null $msgId, array $items): int|string|null
+    protected function renderEditor(int|string $chatId, int|string|null $msgId, array $items, ?int $active = null): int|string|null
     {
         $text = $this->buildEditorText($items);
-        $keyboard = $this->buildEditorKeyboard($items);
+        $keyboard = $this->buildEditorKeyboard($items, $active);
 
         if ($msgId !== null) {
             $this->editMessageText($chatId, $msgId, $text, $keyboard);
