@@ -238,7 +238,7 @@ test('callback edit работает как алиас cat (toggle active)', fun
 });
 
 test('edit alias with non-zero indices sets correct active (catch substr bug)', function (string $payload, int $expectedActive) {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Подготовка: пользователь в await_confirm с 3 пунктами
@@ -699,6 +699,13 @@ test('builds editor keyboard with one wide category row per item and global butt
     expect($flatButtons->has('merge'))->toBeTrue();
     expect($flatButtons->has('replace'))->toBeTrue();
     expect($flatButtons->has('cancel'))->toBeTrue();
+
+    // MARKUP: Пункты свёрнуты (active=null) → все cat:{i} содержат ▶
+    expect($flatButtons->get('cat:0')['text'])->toContain('▶');
+    expect($flatButtons->get('cat:1')['text'])->toContain('▶');
+    // Свёрнутые пункты НЕ должны содержать ▼
+    expect($flatButtons->get('cat:0')['text'])->not->toContain('▼');
+    expect($flatButtons->get('cat:1')['text'])->not->toContain('▼');
 });
 
 test('expands the active item with field rows', function () {
@@ -720,10 +727,53 @@ test('expands the active item with field rows', function () {
     // найти ряд, где есть del:0 — он же содержит cat:0 (Свернуть)
     $delRow = array_values(array_filter($kb, fn ($r) => in_array('del:0', array_column($r, 'payload'), true)))[0];
     expect(array_column($delRow, 'payload'))->toBe(['del:0', 'cat:0']);
+
+    // MARKUP: Широкая кнопка активного пункта (cat:0) содержит ▼ (не ▶)
+    // Ищем кнопку с title и процентом, а не кнопку Свернуть
+    $wideCatButton = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['payload'] ?? null) === 'cat:0' &&
+        str_contains($btn['text'] ?? '', mb_strtoupper('Рестораны')) &&
+        str_contains($btn['text'] ?? '', '10%')
+    );
+    expect($wideCatButton['text'])->toContain('▼');
+    expect($wideCatButton['text'])->not->toContain('▶');
+
+    // UPPER: активная категория — название в верхнем регистре (визуальное выделение)
+    expect($wideCatButton['text'])->toContain(mb_strtoupper('Рестораны'));
+
+    // MARKUP: Поля активного пункта — кнопки-действия с новыми лейблами (без префиксов)
+    expect($flatButtons->get('edt_t:0')['text'])->toBe('✏️ Изменить название');
+    expect($flatButtons->get('edt_p:0')['text'])->toBe('％ Изменить процент');
+    expect($flatButtons->get('note:0')['text'])->toBe('📝 Примечание');
+    expect($flatButtons->get('del:0')['text'])->toBe('🗑 Удалить');
+
+    // MARKUP: Кнопка Свернуть (cat:0) в последнем ряду содержит ✖
+    $collapseButton = collect($delRow)->first(fn ($btn) => ($btn['payload'] ?? null) === 'cat:0');
+    expect($collapseButton['text'])->toContain('✖');
+
+    // GLOBALS HIDDEN: при развёрнутом пункте глобальные действия убраны (не отвлекают)
+    expect($flatButtons->has('add'))->toBeFalse();
+    expect($flatButtons->has('merge'))->toBeFalse();
+    expect($flatButtons->has('replace'))->toBeFalse();
+    expect($flatButtons->has('cancel'))->toBeFalse();
+
+    // VALUES: значения полей развёрнутого пункта — в тексте сообщения (не в кнопках)
+    $textMethod = new ReflectionMethod($service, 'buildEditorText');
+    $text = $textMethod->invoke($service, [
+        ['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null, 'mcc' => ''],
+    ], 0);
+    expect($text)->toContain('Название: Рестораны');
+    expect($text)->toContain('Процент: 10%');
+    expect($text)->toContain('Примечание: (пусто)');
+
+    // FORMAT: активный пункт — жирным (<b>), подпункты — plain text с древовисными префиксами
+    expect($text)->toContain('<b>');
+    expect($text)->toContain('├ Название:');
+    expect($text)->toContain('├ Процент:');
+    expect($text)->toContain('└ Примечание:');
 });
 
 test('toggles active item via cat callback and collapses on second tap', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Подготовка: пользователь в await_confirm с 2 пунктами и msg_id
@@ -754,7 +804,7 @@ test('toggles active item via cat callback and collapses on second tap', functio
 });
 
 test('resets active when deleting an item', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Подготовка: пользователь в await_confirm с 2 пунктами, msg_id и active=1
@@ -782,7 +832,7 @@ test('resets active when deleting an item', function () {
 });
 
 test('edt_t callback enters await_edit with field=title and updates title with re-match', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Создаём категорию «Аптеки» для пользователя
@@ -822,7 +872,7 @@ test('edt_t callback enters await_edit with field=title and updates title with r
 });
 
 test('edt_p callback enters await_edit with field=percent and updates percent', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Подготовка: пользователь в await_confirm
@@ -849,7 +899,7 @@ test('edt_p callback enters await_edit with field=percent and updates percent', 
 });
 
 test('edt_p callback parses integer percent correctly', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     Cache::put('bot.state.max.42', [
@@ -872,7 +922,7 @@ test('edt_p callback parses integer percent correctly', function () {
 });
 
 test('rejects invalid percent input and stays in await_edit', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     Cache::put('bot.state.max.42', [
@@ -894,7 +944,7 @@ test('rejects invalid percent input and stays in await_edit', function () {
 });
 
 test('rejects invalid title input and stays in await_edit', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     Cache::put('bot.state.max.42', [
@@ -917,7 +967,7 @@ test('rejects invalid title input and stays in await_edit', function () {
 });
 
 test('await_note returns to await_confirm with the item expanded', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Подготовка: пользователь в await_confirm
@@ -943,7 +993,7 @@ test('await_note returns to await_confirm with the item expanded', function () {
 });
 
 test('switches active from one item to another (cat:j with j≠i)', function () {
-    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]]),]);
+    Http::fake(['*platform-api2.max.ru/*' => Http::response(['message' => ['body' => ['mid' => 'mid.1']]])]);
     $user = User::factory()->create(['max_id' => '42']);
 
     // Подготовка: пользователь в await_confirm с 3 пунктами, active=0 (развёрнут первый)
@@ -969,6 +1019,42 @@ test('switches active from one item to another (cat:j with j≠i)', function () 
     expect($state['active'])->toBe(2); // switched to item 2
 });
 
+test('collapsed items show ▶ and active item shows ▼ when multiple items exist', function () {
+    $service = app(MaxConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => 1, 'mcc' => ''],
+        ['title' => 'Кафе', 'percent' => 3.0, 'category_id' => null, 'mcc' => ''],
+        ['title' => 'Кино', 'percent' => 10.0, 'category_id' => 2, 'mcc' => ''],
+    ], 1); // active=1 (Кафе)
+
+    // MARKUP: Широкая кнопка активного пункта (кафе, i=1) содержит ▼
+    $wideCatButton1 = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['payload'] ?? null) === 'cat:1' &&
+        str_contains($btn['text'] ?? '', mb_strtoupper('Кафе')) &&
+        str_contains($btn['text'] ?? '', '3%')
+    );
+    expect($wideCatButton1['text'])->toContain('▼');
+    expect($wideCatButton1['text'])->not->toContain('▶');
+
+    // UPPER: активная категория — название в верхнем регистре (визуальное выделение)
+    expect($wideCatButton1['text'])->toContain(mb_strtoupper('Кафе'));
+
+    // MARKUP: Свёрнутые пункты (Аптеки i=0, Кино i=2) содержат ▶
+    $wideCatButton0 = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['payload'] ?? null) === 'cat:0' &&
+        str_contains($btn['text'] ?? '', 'Аптеки') &&
+        str_contains($btn['text'] ?? '', '5%')
+    );
+    expect($wideCatButton0['text'])->toContain('▶');
+    expect($wideCatButton0['text'])->not->toContain('▼');
+
+    $wideCatButton2 = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['payload'] ?? null) === 'cat:2' &&
+        str_contains($btn['text'] ?? '', 'Кино') &&
+        str_contains($btn['text'] ?? '', '10%')
+    );
+    expect($wideCatButton2['text'])->toContain('▶');
+    expect($wideCatButton2['text'])->not->toContain('▼');
+});
+
 test('truncates long title in button label to 30 chars with ellipsis', function () {
     $service = app(MaxConversationService::class);
     $method = new ReflectionMethod($service, 'buildEditorKeyboard');
@@ -987,7 +1073,7 @@ test('truncates long title in button label to 30 chars with ellipsis', function 
     expect($buttonText)->toContain('…');
 
     // Извлекаем title-часть (between mark and percent)
-    preg_match('/^✅\s*(.+?)\s+5%$/', $buttonText, $matches);
+    preg_match('/^(?:▶|▼)\s*✅\s*(.+?)\s+5%$/', $buttonText, $matches);
     $titleInButton = $matches[1] ?? '';
 
     // Длина title в кнопке должна быть ≤ 31 (30 + "…" уже учтена в тексте)

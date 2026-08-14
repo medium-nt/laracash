@@ -765,9 +765,10 @@ abstract class AbstractBotConversationService
      * Формирует текст редактора с распознанными категориями (✅/🆕).
      *
      * @param  array  $items  Элементы [['title'=>string,'percent'=>float,'category_id'=>?int,'mcc'=>string], ...]
+     * @param  int|null  $active  Индекс развёрнутого пункта (под ним печатаются значения полей)
      * @return string Текст сообщения
      */
-    protected function buildEditorText(array $items): string
+    protected function buildEditorText(array $items, ?int $active = null): string
     {
         if (empty($items)) {
             return 'Список пуст. Нажми «➕ Добавить категорию».';
@@ -791,6 +792,17 @@ abstract class AbstractBotConversationService
             if (in_array($item['category_id'] ?? null, $dupIds, true)) {
                 $line .= ' ⚠️';
             }
+
+            // Под развёрнутым пунктом — значения полей (метка: значение). Активный пункт —
+            // жирным (<b>, привлекает внимание), подпункты — курсивом (<i>, второстепенны).
+            // Оба транспорта шлют HTML (TG parse_mode=HTML, MAX format=html) — теги работают везде.
+            if ($i === $active) {
+                $line = '<b>'.$line.'</b>';
+                $line .= "\n  ├ Название: ".e($item['title']);
+                $line .= "\n  ├ Процент: ".$item['percent'].'%';
+                $line .= "\n  └ Примечание: ".(! empty($item['mcc']) ? e($item['mcc']) : '(пусто)');
+            }
+
             $lines[] = $line;
         }
 
@@ -815,7 +827,9 @@ abstract class AbstractBotConversationService
 
     /**
      * Формирует inline-клавиатуру редактора: каждая категория — одна широкая кнопка во весь ряд;
-     * активный (развёрнутый) пункт дополнительно раскрывает ряды полей (Название/Процент/Примечание/Удалить/Свернуть).
+     * активный (развёрнутый) пункт дополнительно раскрывает кнопки действий
+     * (Изменить название / Изменить процент / Примечание / Удалить / Свернуть). Значения полей
+     * при этом печатаются в тексте сообщения (см. buildEditorText), а не в лейблах кнопок.
      *
      * @param  array  $items  Элементы [['title'=>string,'percent'=>float,'category_id'=>?int,'mcc'=>string], ...]
      * @param  int|null  $active  Индекс развёрнутого пункта (null — всё свёрнуто)
@@ -825,8 +839,12 @@ abstract class AbstractBotConversationService
     {
         $keyboard = [];
 
-        // «Добавить категорию» — первой, чтобы всегда была под рукой
-        $keyboard[] = [$this->makeButton('➕ Добавить категорию', 'add')];
+        // «Добавить категорию» — первой, чтобы всегда была под рукой.
+        // Скрывается при проваливании в активный пункт (вместе с Сохранить/Заменить/Отменить),
+        // чтобы глобальные действия не создавали шум при редактировании поля.
+        if ($active === null) {
+            $keyboard[] = [$this->makeButton('➕ Добавить категорию', 'add')];
+        }
 
         foreach ($items as $i => $item) {
             $title = $item['title'] ?? '';
@@ -840,18 +858,23 @@ abstract class AbstractBotConversationService
             // Маркер статуса: ✅ — существующая категория, 🆕 — новая (будет создана)
             $mark = empty($item['category_id']) ? '🆕' : '✅';
 
-            // Широкая кнопка-категория во весь ряд (тап → разворот/сворот)
-            $keyboard[] = [$this->makeButton("{$mark} ".e($title)." {$percent}%", 'cat:'.$i)];
+            // Индикатор разворота: ▶ — свёрнуто, ▼ — развёрнуто
+            $arrow = ($i === $active) ? '▼' : '▶';
 
-            // Поля активного (развёрнутого) пункта — каждый ряд во всю ширину,
-            // кроме последнего (Удалить + Свернуть делит ряд пополам)
+            // Активная (развёрнутая) категория — ВЕРХНИМ регистром названия: визуальное выделение
+            // пункта, в который провалились (свёрнутые соседи — обычный регистр).
+            // inline-кнопки не поддерживают жирный/курсив, поэтому единственный канал — сам текст.
+            $displayTitle = ($i === $active) ? mb_strtoupper($title) : $title;
+
+            // Широкая кнопка-категория во весь ряд (тап → разворот/сворот)
+            $keyboard[] = [$this->makeButton("{$arrow} {$mark} ".e($displayTitle)." {$percent}%", 'cat:'.$i)];
+
+            // Развёрнутый пункт: только действия во всю ширину (каждая кнопка — один ряд,
+            // кроме последнего: Удалить + Свернуть делит ряд пополам). Значения полей — в тексте.
             if ($i === $active) {
-                $keyboard[] = [$this->makeButton('✏️ Название: '.e($item['title'] ?? ''), 'edt_t:'.$i)];
-                $keyboard[] = [$this->makeButton('Процент: '.($item['percent'] ?? 0).'%', 'edt_p:'.$i)];
-                $noteLabel = ! empty($item['mcc'])
-                    ? '📝 Примечание: '.e($item['mcc'])
-                    : '📝 Примечание: (пусто)';
-                $keyboard[] = [$this->makeButton($noteLabel, 'note:'.$i)];
+                $keyboard[] = [$this->makeButton('✏️ Изменить название', 'edt_t:'.$i)];
+                $keyboard[] = [$this->makeButton('％ Изменить процент', 'edt_p:'.$i)];
+                $keyboard[] = [$this->makeButton('📝 Примечание', 'note:'.$i)];
                 $keyboard[] = [
                     $this->makeButton('🗑 Удалить', 'del:'.$i),
                     $this->makeButton('✖ Свернуть', 'cat:'.$i),
@@ -859,10 +882,13 @@ abstract class AbstractBotConversationService
             }
         }
 
-        // Кнопки сохранения — каждая на всю ширину своей строки
-        $keyboard[] = [$this->makeButton('💾 Сохранить (добавить к старым)', 'merge')];
-        $keyboard[] = [$this->makeButton('♻️ Заменить (удалить старые)', 'replace')];
-        $keyboard[] = [$this->makeButton('Отменить', 'cancel')];
+        // Глобальные кнопки сохранения/отмены — только в свёрнутом состоянии (active=null).
+        // При проваливании в пункт убраны, чтобы не отвлекать; доступны после ✖ Свернуть.
+        if ($active === null) {
+            $keyboard[] = [$this->makeButton('💾 Сохранить (добавить к старым)', 'merge')];
+            $keyboard[] = [$this->makeButton('♻️ Заменить (удалить старые)', 'replace')];
+            $keyboard[] = [$this->makeButton('Отменить', 'cancel')];
+        }
 
         return $keyboard;
     }
@@ -991,6 +1017,7 @@ abstract class AbstractBotConversationService
             if ($percent > 100) {
                 return null;
             }
+
             return $percent;
         }
 
@@ -1139,7 +1166,7 @@ abstract class AbstractBotConversationService
      */
     protected function renderEditor(int|string $chatId, int|string|null $msgId, array $items, ?int $active = null): int|string|null
     {
-        $text = $this->buildEditorText($items);
+        $text = $this->buildEditorText($items, $active);
         $keyboard = $this->buildEditorKeyboard($items, $active);
 
         if ($msgId !== null) {
