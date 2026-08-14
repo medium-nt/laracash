@@ -7,6 +7,28 @@
   - `recognizeForImport(int $userId, string $filePath)`
   - `getRecognizedCashback(App\Models\Card $card)`
 
+### AbstractBotConversationService
+- **File:** `app/Services/Bot\AbstractBotConversationService.php`
+- **Dependencies:** `CashbackImportService`
+- **Methods:**
+  - `handle(array $update)`
+  - `static parseItem(string $text)`
+
+### CashbackImportService
+- **File:** `app/Services/Bot\CashbackImportService.php`
+- **Dependencies:** `AiService`
+- **Methods:**
+  - `import(int $userId, int $cardId, array $photoPaths)`
+  - `apply(int $userId, int $cardId, array $raw)`
+
+### MaxConversationService
+- **File:** `app/Services/Bot\MaxConversationService.php`
+- **Dependencies:** `MaxBotService`, `CashbackImportService`
+
+### TelegramConversationService
+- **File:** `app/Services/Bot\TelegramConversationService.php`
+- **Dependencies:** `TelegramBotService`, `CashbackImportService`
+
 ### CashbackService
 - **File:** `app/Services/CashbackService.php`
 - **Methods:**
@@ -34,4 +56,27 @@
 - **File:** `app/Services/FileStorageService.php`
 - **Methods:**
   - `save(Illuminate\Http\UploadedFile $file, string $path, string $filename, string $disk)`
+
+### MaxBotService
+- **File:** `app/Services/Max\MaxBotService.php`
+- **Methods:**
+  - `static caOptions()`
+  - `sendMessage($chatId, string $text, array $keyboard)`
+  - `editMessageText($chatId, $messageId, string $text, array $keyboard)`
+  - `deleteMessage($chatId, $messageId)`
+  - `sendChatAction($chatId, string $action)`
+  - `setMyCommands(array $commands)`
+  - `answerCallback(string $callbackId, string $text)`
+  - `downloadPhoto(string $url)`
+
+### TelegramBotService
+- **File:** `app/Services/Telegram\TelegramBotService.php`
+- **Methods:**
+  - `sendMessage($chatId, string $text, array $keyboard)`
+  - `editMessageText($chatId, int $messageId, string $text, array $keyboard)`
+  - `deleteMessage($chatId, int $messageId)`
+  - `sendChatAction($chatId, string $action)`
+  - `setMyCommands(array $commands)`
+  - `answerCallback(string $callbackId, string $text)`
+  - `downloadPhoto(string $fileId)`
 

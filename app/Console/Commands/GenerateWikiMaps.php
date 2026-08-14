@@ -278,7 +278,9 @@ class GenerateWikiMaps extends Command
 
         foreach ($finder as $file) {
             $className = $file->getBasename('.php');
-            $fqcn = "App\\Services\\{$className}";
+            $relativePath = str_replace('/', '\\', $file->getRelativePath());
+            $namespace = $relativePath ? "App\\Services\\{$relativePath}" : 'App\\Services';
+            $fqcn = "{$namespace}\\{$className}";
 
             if (! class_exists($fqcn)) {
                 continue;
@@ -298,7 +300,7 @@ class GenerateWikiMaps extends Command
                     }
 
                     $params = array_map(
-                        fn (\ReflectionParameter $p) => ($p->getType() ? $p->getType()->getName().' ' : '').'$'.$p->getName(),
+                        fn (\ReflectionParameter $p) => (($type = $p->getType()) instanceof \ReflectionNamedType ? $type->getName().' ' : '').'$'.$p->getName(),
                         $method->getParameters()
                     );
 

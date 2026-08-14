@@ -1,8 +1,8 @@
 # Project Wiki Index
-> Generated: 2026-08-14 13:22 | Models: 6 | Services: 5 | Controllers: 23 | Livewire: 2
+> Generated: 2026-08-14 13:37 | Models: 6 | Services: 11 | Controllers: 23 | Livewire: 2
 
 ## Quick Orientation
-The skeleton application for the Laravel framework..
+LaraCash — управление кешбэк-предложениями по банковским картам (веб + Telegram/MAX боты)..
 PHP ^8.2, Laravel 11, Livewire.
 
 ## Models (6)
@@ -15,14 +15,20 @@ PHP ^8.2, Laravel 11, Livewire.
 | Role | `roles` |  |  |
 | User | `users` | role | HasFactory, Notifiable |
 
-## Services (5)
+## Services (11)
 | Service | Methods | Dependencies |
 |---------|---------|-------------|
 | AiService | 2 | — |
+| AbstractBotConversationService | 2 | CashbackImportService |
+| CashbackImportService | 2 | AiService |
+| MaxConversationService | 0 | MaxBotService, CashbackImportService |
+| TelegramConversationService | 0 | TelegramBotService, CashbackImportService |
 | CashbackService | 4 | — |
 | CategoryMatcher | 6 | — |
 | CategoryService | 1 | — |
 | FileStorageService | 1 | — |
+| MaxBotService | 8 | — |
+| TelegramBotService | 7 | — |
 
 ## Controllers (23)
 | Controller | Key Methods |
@@ -65,11 +71,11 @@ PHP ^8.2, Laravel 11, Livewire.
 
 | Class | Type | Indegree | Outdegree | Score |
 |-------|------|----------|-----------|-------|
-| **CashbackService** | service | 5 | 0 | 10 |
+| **CashbackService** | service | 6 | 0 | 12 |
+| **CashbackImportService** | service | 3 | 2 | 8 |
+| **MaxConversationService** | service | 1 | 2 | 4 |
+| **TelegramConversationService** | service | 1 | 2 | 4 |
 | **CashbackController** | controller | 0 | 4 | 4 |
-| **FileStorageService** | service | 1 | 0 | 2 |
-| **FileUploadController** | controller | 0 | 1 | 1 |
-| **SearchDataController** | controller | 0 | 1 | 1 |
 
 ## Detailed Maps
 - [Models](maps/models.md) — полные fillable, casts, relationships

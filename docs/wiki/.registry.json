@@ -1,8 +1,8 @@
 {
-    "generated_at": "2026-08-14T13:22:06+00:00",
+    "generated_at": "2026-08-14T13:37:49+00:00",
     "counts": {
         "models": 6,
-        "services": 5,
+        "services": 11,
         "controllers": 23,
         "livewire": 2
     },
@@ -49,6 +49,22 @@
             "file": "app\/Services\/AiService.php",
             "methods_count": 2
         },
+        "AbstractBotConversationService": {
+            "file": "app\/Services\/Bot\\AbstractBotConversationService.php",
+            "methods_count": 2
+        },
+        "CashbackImportService": {
+            "file": "app\/Services\/Bot\\CashbackImportService.php",
+            "methods_count": 2
+        },
+        "MaxConversationService": {
+            "file": "app\/Services\/Bot\\MaxConversationService.php",
+            "methods_count": 0
+        },
+        "TelegramConversationService": {
+            "file": "app\/Services\/Bot\\TelegramConversationService.php",
+            "methods_count": 0
+        },
         "CashbackService": {
             "file": "app\/Services\/CashbackService.php",
             "methods_count": 4
@@ -64,6 +80,14 @@
         "FileStorageService": {
             "file": "app\/Services\/FileStorageService.php",
             "methods_count": 1
+        },
+        "MaxBotService": {
+            "file": "app\/Services\/Max\\MaxBotService.php",
+            "methods_count": 8
+        },
+        "TelegramBotService": {
+            "file": "app\/Services\/Telegram\\TelegramBotService.php",
+            "methods_count": 7
         }
     },
     "controllers": {
