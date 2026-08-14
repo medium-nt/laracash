@@ -1,0 +1,163 @@
+{
+    "generated_at": "2026-08-14T13:22:06+00:00",
+    "counts": {
+        "models": 6,
+        "services": 5,
+        "controllers": 23,
+        "livewire": 2
+    },
+    "models": {
+        "AvailableAllCashback": {
+            "table": "card_category_all_available_cashback",
+            "file": "app\/Models\/AvailableAllCashback.php",
+            "fillable_count": 4,
+            "relationships_count": 2
+        },
+        "Bank": {
+            "table": "banks",
+            "file": "app\/Models\/Bank.php",
+            "fillable_count": 2,
+            "relationships_count": 0
+        },
+        "Cashback": {
+            "table": "card_category_cashback",
+            "file": "app\/Models\/Cashback.php",
+            "fillable_count": 4,
+            "relationships_count": 2
+        },
+        "Category": {
+            "table": "categories",
+            "file": "app\/Models\/Category.php",
+            "fillable_count": 3,
+            "relationships_count": 2
+        },
+        "Role": {
+            "table": "roles",
+            "file": "app\/Models\/Role.php",
+            "fillable_count": 1,
+            "relationships_count": 0
+        },
+        "User": {
+            "table": "users",
+            "file": "app\/Models\/User.php",
+            "fillable_count": 5,
+            "relationships_count": 1
+        }
+    },
+    "services": {
+        "AiService": {
+            "file": "app\/Services\/AiService.php",
+            "methods_count": 2
+        },
+        "CashbackService": {
+            "file": "app\/Services\/CashbackService.php",
+            "methods_count": 4
+        },
+        "CategoryMatcher": {
+            "file": "app\/Services\/CategoryMatcher.php",
+            "methods_count": 6
+        },
+        "CategoryService": {
+            "file": "app\/Services\/CategoryService.php",
+            "methods_count": 1
+        },
+        "FileStorageService": {
+            "file": "app\/Services\/FileStorageService.php",
+            "methods_count": 1
+        }
+    },
+    "controllers": {
+        "ConfirmPasswordController": {
+            "file": "app\/Http\/Controllers\/Auth\\ConfirmPasswordController.php",
+            "methods_count": 3
+        },
+        "ForgotPasswordController": {
+            "file": "app\/Http\/Controllers\/Auth\\ForgotPasswordController.php",
+            "methods_count": 3
+        },
+        "LoginController": {
+            "file": "app\/Http\/Controllers\/Auth\\LoginController.php",
+            "methods_count": 7
+        },
+        "RegisterController": {
+            "file": "app\/Http\/Controllers\/Auth\\RegisterController.php",
+            "methods_count": 3
+        },
+        "ResetPasswordController": {
+            "file": "app\/Http\/Controllers\/Auth\\ResetPasswordController.php",
+            "methods_count": 4
+        },
+        "VerificationController": {
+            "file": "app\/Http\/Controllers\/Auth\\VerificationController.php",
+            "methods_count": 4
+        },
+        "BankController": {
+            "file": "app\/Http\/Controllers\/BankController.php",
+            "methods_count": 6
+        },
+        "BotLinkController": {
+            "file": "app\/Http\/Controllers\/BotLinkController.php",
+            "methods_count": 2
+        },
+        "CardController": {
+            "file": "app\/Http\/Controllers\/CardController.php",
+            "methods_count": 7
+        },
+        "CashbackController": {
+            "file": "app\/Http\/Controllers\/CashbackController.php",
+            "methods_count": 10
+        },
+        "CategoryController": {
+            "file": "app\/Http\/Controllers\/CategoryController.php",
+            "methods_count": 8
+        },
+        "Controller": {
+            "file": "app\/Http\/Controllers\/Controller.php",
+            "methods_count": 6
+        },
+        "FileUploadController": {
+            "file": "app\/Http\/Controllers\/FileUploadController.php",
+            "methods_count": 1
+        },
+        "HomeController": {
+            "file": "app\/Http\/Controllers\/HomeController.php",
+            "methods_count": 1
+        },
+        "LandingController": {
+            "file": "app\/Http\/Controllers\/LandingController.php",
+            "methods_count": 1
+        },
+        "MaxLinkController": {
+            "file": "app\/Http\/Controllers\/MaxLinkController.php",
+            "methods_count": 2
+        },
+        "MaxWebhookController": {
+            "file": "app\/Http\/Controllers\/MaxWebhookController.php",
+            "methods_count": 0
+        },
+        "MiniAppController": {
+            "file": "app\/Http\/Controllers\/MiniAppController.php",
+            "methods_count": 1
+        },
+        "PageController": {
+            "file": "app\/Http\/Controllers\/PageController.php",
+            "methods_count": 1
+        },
+        "SearchController": {
+            "file": "app\/Http\/Controllers\/SearchController.php",
+            "methods_count": 2
+        },
+        "SearchDataController": {
+            "file": "app\/Http\/Controllers\/SearchDataController.php",
+            "methods_count": 1
+        },
+        "TelegramWebhookController": {
+            "file": "app\/Http\/Controllers\/TelegramWebhookController.php",
+            "methods_count": 0
+        },
+        "UsersController": {
+            "file": "app\/Http\/Controllers\/UsersController.php",
+            "methods_count": 9
+        }
+    }
+}

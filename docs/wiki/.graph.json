@@ -1,0 +1,305 @@
+{
+    "generated_at": "2026-08-14T13:22:06+00:00",
+    "nodes": {
+        "AiService": {
+            "type": "service",
+            "file": "app\/Services\/AiService.php",
+            "methods_count": 2
+        },
+        "CashbackService": {
+            "type": "service",
+            "file": "app\/Services\/CashbackService.php",
+            "methods_count": 4
+        },
+        "CategoryMatcher": {
+            "type": "service",
+            "file": "app\/Services\/CategoryMatcher.php",
+            "methods_count": 6
+        },
+        "CategoryService": {
+            "type": "service",
+            "file": "app\/Services\/CategoryService.php",
+            "methods_count": 1
+        },
+        "FileStorageService": {
+            "type": "service",
+            "file": "app\/Services\/FileStorageService.php",
+            "methods_count": 1
+        },
+        "ConfirmPasswordController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Auth\\ConfirmPasswordController.php",
+            "methods_count": 3
+        },
+        "ForgotPasswordController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Auth\\ForgotPasswordController.php",
+            "methods_count": 3
+        },
+        "LoginController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Auth\\LoginController.php",
+            "methods_count": 7
+        },
+        "RegisterController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Auth\\RegisterController.php",
+            "methods_count": 3
+        },
+        "ResetPasswordController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Auth\\ResetPasswordController.php",
+            "methods_count": 4
+        },
+        "VerificationController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Auth\\VerificationController.php",
+            "methods_count": 4
+        },
+        "BankController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/BankController.php",
+            "methods_count": 6
+        },
+        "BotLinkController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/BotLinkController.php",
+            "methods_count": 2
+        },
+        "CardController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/CardController.php",
+            "methods_count": 7
+        },
+        "CashbackController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/CashbackController.php",
+            "methods_count": 10
+        },
+        "CategoryController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/CategoryController.php",
+            "methods_count": 8
+        },
+        "Controller": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/Controller.php",
+            "methods_count": 6
+        },
+        "FileUploadController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/FileUploadController.php",
+            "methods_count": 1
+        },
+        "HomeController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/HomeController.php",
+            "methods_count": 1
+        },
+        "LandingController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/LandingController.php",
+            "methods_count": 1
+        },
+        "MaxLinkController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/MaxLinkController.php",
+            "methods_count": 2
+        },
+        "MaxWebhookController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/MaxWebhookController.php",
+            "methods_count": 0
+        },
+        "MiniAppController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/MiniAppController.php",
+            "methods_count": 1
+        },
+        "PageController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/PageController.php",
+            "methods_count": 1
+        },
+        "SearchController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/SearchController.php",
+            "methods_count": 2
+        },
+        "SearchDataController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/SearchDataController.php",
+            "methods_count": 1
+        },
+        "TelegramWebhookController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/TelegramWebhookController.php",
+            "methods_count": 0
+        },
+        "UsersController": {
+            "type": "controller",
+            "file": "app\/Http\/Controllers\/UsersController.php",
+            "methods_count": 9
+        }
+    },
+    "edges": [
+        {
+            "from": "FileUploadController",
+            "to": "FileStorageService",
+            "kind": "di"
+        },
+        {
+            "from": "CashbackController",
+            "to": "CashbackService",
+            "kind": "static_call"
+        },
+        {
+            "from": "CashbackController",
+            "to": "CashbackService",
+            "kind": "static_call"
+        },
+        {
+            "from": "CashbackController",
+            "to": "CashbackService",
+            "kind": "static_call"
+        },
+        {
+            "from": "CashbackController",
+            "to": "CashbackService",
+            "kind": "static_call"
+        },
+        {
+            "from": "SearchDataController",
+            "to": "CashbackService",
+            "kind": "static_call"
+        }
+    ],
+    "god_nodes": [
+        {
+            "name": "CashbackService",
+            "indegree": 5,
+            "outdegree": 0,
+            "score": 10
+        },
+        {
+            "name": "CashbackController",
+            "indegree": 0,
+            "outdegree": 4,
+            "score": 4
+        },
+        {
+            "name": "FileStorageService",
+            "indegree": 1,
+            "outdegree": 0,
+            "score": 2
+        },
+        {
+            "name": "FileUploadController",
+            "indegree": 0,
+            "outdegree": 1,
+            "score": 1
+        },
+        {
+            "name": "SearchDataController",
+            "indegree": 0,
+            "outdegree": 1,
+            "score": 1
+        },
+        {
+            "name": "AiService",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "CategoryMatcher",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "CategoryService",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "ConfirmPasswordController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "ForgotPasswordController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "LoginController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "RegisterController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "ResetPasswordController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "VerificationController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "BankController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "BotLinkController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "CardController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "CategoryController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "Controller",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        },
+        {
+            "name": "HomeController",
+            "indegree": 0,
+            "outdegree": 0,
+            "score": 0
+        }
+    ],
+    "stats": {
+        "total_nodes": 28,
+        "total_edges": 6,
+        "di_edges": 1,
+        "static_call_edges": 5
+    }
+}
