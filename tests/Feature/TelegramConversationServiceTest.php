@@ -8,6 +8,7 @@ use App\Services\Bot\TelegramConversationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 
 uses(RefreshDatabase::class);
 
@@ -1602,3 +1603,333 @@ test('truncates long title in button label to 30 chars with ellipsis', function 
     // Длина title в кнопке должна быть ≤ 31 (30 + "…" уже учтена в тексте)
     expect(mb_strlen($titleInButton))->toBeLessThanOrEqual(31);
 });
+test('/start генерирует search_token и отправляет меню с URL-кнопкой', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+
+    app(TelegramConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start'],
+    ]);
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Проверяем, что sendMessage отправлен с URL-кнопкой
+    Http::assertSent(function ($request) use ($user) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        // Ищем URL-кнопку с текстом "📂 Мои кешбэки"
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['url']) && str_contains($button['url'], '/search/')) {
+                    return str_contains($button['url'], $user->search_token)
+                        && str_contains($button['url'], 'example.com');
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('ИНВАРИАНТ: /start НЕ перегенерирует существующий search_token', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+    $user->search_token = 'fixedtoken123';
+    $user->save();
+
+    app(TelegramConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start'],
+    ]);
+
+    // search_token НЕ изменился
+    $user->refresh();
+    expect($user->search_token)->toBe('fixedtoken123');
+
+    // URL-кнопка содержит старый токен
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['url']) && str_contains($button['url'], '/search/fixedtoken123')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('callback cmd:link генерирует search_token и отправляет ссылку', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+
+    app(TelegramConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_link',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cmd:link',
+        ],
+    ]);
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Проверяем, что отправлено сообщение с ссылкой и URL-кнопкой
+    Http::assertSent(function ($request) use ($user) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $text = $data['text'] ?? '';
+
+        // Текст содержит /search/
+        if (! str_contains($text, '/search/')) {
+            return false;
+        }
+
+        // URL-кнопка содержит токен
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['url']) && str_contains($button['url'], $user->search_token)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('ИНВАРИАНТ: cmd:link НЕ перегенерирует существующий search_token', function () {
+    URL::forceRootUrl('https://example.com');
+
+    $user = User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+    $user->search_token = 'fixedtoken456';
+    $user->save();
+
+    app(TelegramConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_link',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cmd:link',
+        ],
+    ]);
+
+    // search_token НЕ изменился
+    $user->refresh();
+    expect($user->search_token)->toBe('fixedtoken456');
+
+    // Сообщение и кнопка содержат старый токен
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $text = $data['text'] ?? '';
+
+        // Текст содержит /search/fixedtoken456
+        if (! str_contains($text, '/search/fixedtoken456')) {
+            return false;
+        }
+
+        // URL-кнопка содержит старый токен
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['url']) && str_contains($button['url'], '/search/fixedtoken456')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('/start на localhost НЕ добавляет URL-кнопку, но меню отправляется', function () {
+    // БЕЗ override app.url — по умолчанию localhost:8000 (не публичный)
+    $user = User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+
+    app(TelegramConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start'],
+    ]);
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Сообщение "Привет..." отправлено
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Привет'));
+
+    // URL-кнопки НЕТ — проверяем через reply_markup
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        // Проверяем, что НЕТ кнопки с url
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['url'])) {
+                    return false; // Нашли URL-кнопку — провал
+                }
+            }
+        }
+
+        return true;
+    });
+
+    // Callback-кнопка "Прислать ссылку" (cmd:link) ЕСТЬ
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['callback_data']) && $button['callback_data'] === 'cmd:link') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    });
+});
+
+test('cmd:link на localhost присылает ссылку текстом БЕЗ URL-кнопки', function () {
+    // БЕЗ override app.url — по умолчанию localhost:8000 (не публичный)
+    $user = User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+
+    app(TelegramConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_link',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cmd:link',
+        ],
+    ]);
+
+    // search_token сгенерирован
+    $user->refresh();
+    expect($user->search_token)->not->toBeEmpty();
+
+    // Текст сообщения содержит /search/
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+
+        return str_contains($data['text'] ?? '', '/search/');
+    });
+
+    // URL-кнопки НЕТ
+    Http::assertSent(function ($request) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        // Проверяем, что НЕТ кнопки с url
+        foreach ($inlineKeyboard as $row) {
+            foreach ($row as $button) {
+                if (isset($button['url'])) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    });
+});
+
+test('isPublicUrl: URL-кнопка в меню зависит от публичности APP_URL', function (string $appUrl, bool $shouldHaveUrlButton) {
+    User::factory()->create(['telegram_id' => '42', 'name' => 'Иван']);
+
+    URL::forceRootUrl($appUrl);
+
+    app(TelegramConversationService::class)->handle([
+        'message' => ['chat' => ['id' => 100], 'from' => ['id' => 42], 'text' => '/start'],
+    ]);
+
+    // Меню в любом случае отправлено
+    Http::assertSent(fn ($r) => str_contains($r->url(), 'sendMessage')
+        && str_contains($r->data()['text'] ?? '', 'Привет'));
+
+    // Проверяем наличие/отсутствие URL-кнопки
+    Http::assertSent(function ($request) use ($shouldHaveUrlButton) {
+        if (! str_contains($request->url(), 'sendMessage')) {
+            return false;
+        }
+
+        $data = $request->data();
+        $replyMarkup = json_decode($data['reply_markup'] ?? '{}', true);
+        $inlineKeyboard = $replyMarkup['inline_keyboard'] ?? [];
+
+        // Собираем все кнопки плоско
+        $allButtons = collect($inlineKeyboard)->flatten(1)->all();
+
+        $hasUrlButton = false;
+        foreach ($allButtons as $button) {
+            if (isset($button['url']) && str_contains($button['url'], '/search/')) {
+                $hasUrlButton = true;
+                break;
+            }
+        }
+
+        return $shouldHaveUrlButton ? $hasUrlButton : ! $hasUrlButton;
+    });
+})->with([
+    'публичный https://example.com' => ['https://example.com', true],
+    'локальный http://localhost' => ['http://localhost', false],
+    '127.0.0.1' => ['http://127.0.0.1', false],
+    '192.168.1.1' => ['http://192.168.1.1', false],
+    '10.0.0.5' => ['http://10.0.0.5', false],
+    '172.17.0.1 (Docker)' => ['http://172.17.0.1', false],
+    '172.217.20.46 (публичный 172.*)' => ['http://172.217.20.46', true],
+    'example.test TLD' => ['http://example.test', false],
+    'LOCALHOST uppercase' => ['http://LOCALHOST:8000', false],
+]);

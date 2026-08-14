@@ -3,6 +3,7 @@
 namespace App\Services\Telegram;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TelegramBotService
@@ -41,6 +42,14 @@ class TelegramBotService
         $response = Http::timeout(15)->post("{$this->base()}/sendMessage", $payload);
 
         if (! $response->successful()) {
+            // [ДИАГНОСТИКА] транспорт молчал при ошибках (напр. BUTTON_URL_INVALID),
+            // теперь логируем причину не-200 — зеркально MaxBotService
+            Log::warning('TG sendMessage !ok', [
+                'chat_id' => $chatId,
+                'status' => $response->status(),
+                'body' => mb_substr((string) $response->body(), 0, 300),
+            ]);
+
             return null;
         }
 
@@ -68,7 +77,16 @@ class TelegramBotService
             $payload['reply_markup'] = json_encode(['inline_keyboard' => $keyboard]);
         }
 
-        Http::timeout(15)->post("{$this->base()}/editMessageText", $payload);
+        $response = Http::timeout(15)->post("{$this->base()}/editMessageText", $payload);
+
+        if (! $response->successful()) {
+            Log::warning('TG editMessageText !ok', [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'status' => $response->status(),
+                'body' => mb_substr((string) $response->body(), 0, 300),
+            ]);
+        }
     }
 
     /**

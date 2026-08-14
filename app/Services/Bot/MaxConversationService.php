@@ -112,6 +112,18 @@ final class MaxConversationService extends AbstractBotConversationService
     }
 
     /**
+     * Формирует inline URL-кнопку в формате MAX API (открывает ссылку).
+     *
+     * @param  string  $text  Текст кнопки
+     * @param  string  $url  URL, который откроется при нажатии
+     * @return array ['type'=>'link','text'=>..,'url'=>..]
+     */
+    protected function makeUrlButton(string $text, string $url): array
+    {
+        return ['type' => 'link', 'text' => $text, 'url' => $url];
+    }
+
+    /**
      * Извлекает chat id из MAX-update.
      *
      * @param  array  $update  Полный webhook-update
