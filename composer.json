@@ -1,11 +1,11 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/laravel",
+    "name": "skuze/laracash",
     "type": "project",
-    "description": "The skeleton application for the Laravel framework.",
+    "description": "LaraCash — управление кешбэк-предложениями по банковским картам (веб + Telegram/MAX боты).",
     "keywords": [
         "laravel",
-        "framework"
+        "cashback"
     ],
     "license": "MIT",
     "require": {

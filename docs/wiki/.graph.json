@@ -1,10 +1,30 @@
 {
-    "generated_at": "2026-08-14T13:22:06+00:00",
+    "generated_at": "2026-08-14T13:37:49+00:00",
     "nodes": {
         "AiService": {
             "type": "service",
             "file": "app\/Services\/AiService.php",
             "methods_count": 2
+        },
+        "AbstractBotConversationService": {
+            "type": "service",
+            "file": "app\/Services\/Bot\\AbstractBotConversationService.php",
+            "methods_count": 2
+        },
+        "CashbackImportService": {
+            "type": "service",
+            "file": "app\/Services\/Bot\\CashbackImportService.php",
+            "methods_count": 2
+        },
+        "MaxConversationService": {
+            "type": "service",
+            "file": "app\/Services\/Bot\\MaxConversationService.php",
+            "methods_count": 0
+        },
+        "TelegramConversationService": {
+            "type": "service",
+            "file": "app\/Services\/Bot\\TelegramConversationService.php",
+            "methods_count": 0
         },
         "CashbackService": {
             "type": "service",
@@ -25,6 +45,16 @@
             "type": "service",
             "file": "app\/Services\/FileStorageService.php",
             "methods_count": 1
+        },
+        "MaxBotService": {
+            "type": "service",
+            "file": "app\/Services\/Max\\MaxBotService.php",
+            "methods_count": 8
+        },
+        "TelegramBotService": {
+            "type": "service",
+            "file": "app\/Services\/Telegram\\TelegramBotService.php",
+            "methods_count": 7
         },
         "ConfirmPasswordController": {
             "type": "controller",
@@ -144,9 +174,54 @@
     },
     "edges": [
         {
+            "from": "AbstractBotConversationService",
+            "to": "CashbackImportService",
+            "kind": "di"
+        },
+        {
+            "from": "CashbackImportService",
+            "to": "AiService",
+            "kind": "di"
+        },
+        {
+            "from": "MaxConversationService",
+            "to": "MaxBotService",
+            "kind": "di"
+        },
+        {
+            "from": "MaxConversationService",
+            "to": "CashbackImportService",
+            "kind": "di"
+        },
+        {
+            "from": "TelegramConversationService",
+            "to": "TelegramBotService",
+            "kind": "di"
+        },
+        {
+            "from": "TelegramConversationService",
+            "to": "CashbackImportService",
+            "kind": "di"
+        },
+        {
             "from": "FileUploadController",
             "to": "FileStorageService",
             "kind": "di"
+        },
+        {
+            "from": "MaxWebhookController",
+            "to": "MaxConversationService",
+            "kind": "di"
+        },
+        {
+            "from": "TelegramWebhookController",
+            "to": "TelegramConversationService",
+            "kind": "di"
+        },
+        {
+            "from": "CashbackImportService",
+            "to": "CashbackService",
+            "kind": "static_call"
         },
         {
             "from": "CashbackController",
@@ -177,9 +252,27 @@
     "god_nodes": [
         {
             "name": "CashbackService",
-            "indegree": 5,
+            "indegree": 6,
             "outdegree": 0,
-            "score": 10
+            "score": 12
+        },
+        {
+            "name": "CashbackImportService",
+            "indegree": 3,
+            "outdegree": 2,
+            "score": 8
+        },
+        {
+            "name": "MaxConversationService",
+            "indegree": 1,
+            "outdegree": 2,
+            "score": 4
+        },
+        {
+            "name": "TelegramConversationService",
+            "indegree": 1,
+            "outdegree": 2,
+            "score": 4
         },
         {
             "name": "CashbackController",
@@ -188,13 +281,43 @@
             "score": 4
         },
         {
+            "name": "AiService",
+            "indegree": 1,
+            "outdegree": 0,
+            "score": 2
+        },
+        {
             "name": "FileStorageService",
             "indegree": 1,
             "outdegree": 0,
             "score": 2
         },
         {
+            "name": "MaxBotService",
+            "indegree": 1,
+            "outdegree": 0,
+            "score": 2
+        },
+        {
+            "name": "TelegramBotService",
+            "indegree": 1,
+            "outdegree": 0,
+            "score": 2
+        },
+        {
+            "name": "AbstractBotConversationService",
+            "indegree": 0,
+            "outdegree": 1,
+            "score": 1
+        },
+        {
             "name": "FileUploadController",
+            "indegree": 0,
+            "outdegree": 1,
+            "score": 1
+        },
+        {
+            "name": "MaxWebhookController",
             "indegree": 0,
             "outdegree": 1,
             "score": 1
@@ -206,10 +329,10 @@
             "score": 1
         },
         {
-            "name": "AiService",
+            "name": "TelegramWebhookController",
             "indegree": 0,
-            "outdegree": 0,
-            "score": 0
+            "outdegree": 1,
+            "score": 1
         },
         {
             "name": "CategoryMatcher",
@@ -246,60 +369,12 @@
             "indegree": 0,
             "outdegree": 0,
             "score": 0
-        },
-        {
-            "name": "ResetPasswordController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "VerificationController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "BankController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "BotLinkController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "CardController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "CategoryController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "Controller",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
-        },
-        {
-            "name": "HomeController",
-            "indegree": 0,
-            "outdegree": 0,
-            "score": 0
         }
     ],
     "stats": {
-        "total_nodes": 28,
-        "total_edges": 6,
-        "di_edges": 1,
-        "static_call_edges": 5
+        "total_nodes": 34,
+        "total_edges": 15,
+        "di_edges": 9,
+        "static_call_edges": 6
     }
 }

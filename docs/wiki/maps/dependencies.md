@@ -6,40 +6,55 @@
 
 | Rank | Class | Type | Indegree | Outdegree | Score |
 |------|-------|------|----------|-----------|-------|
-| 1 | **CashbackService** | service | 5 | 0 | 10 |
-| 2 | **CashbackController** | controller | 0 | 4 | 4 |
-| 3 | **FileStorageService** | service | 1 | 0 | 2 |
-| 4 | **FileUploadController** | controller | 0 | 1 | 1 |
-| 5 | **SearchDataController** | controller | 0 | 1 | 1 |
-| 6 | **AiService** | service | 0 | 0 | 0 |
-| 7 | **CategoryMatcher** | service | 0 | 0 | 0 |
-| 8 | **CategoryService** | service | 0 | 0 | 0 |
-| 9 | **ConfirmPasswordController** | controller | 0 | 0 | 0 |
-| 10 | **ForgotPasswordController** | controller | 0 | 0 | 0 |
+| 1 | **CashbackService** | service | 6 | 0 | 12 |
+| 2 | **CashbackImportService** | service | 3 | 2 | 8 |
+| 3 | **MaxConversationService** | service | 1 | 2 | 4 |
+| 4 | **TelegramConversationService** | service | 1 | 2 | 4 |
+| 5 | **CashbackController** | controller | 0 | 4 | 4 |
+| 6 | **AiService** | service | 1 | 0 | 2 |
+| 7 | **FileStorageService** | service | 1 | 0 | 2 |
+| 8 | **MaxBotService** | service | 1 | 0 | 2 |
+| 9 | **TelegramBotService** | service | 1 | 0 | 2 |
+| 10 | **AbstractBotConversationService** | service | 0 | 1 | 1 |
 
 ## Dependency Graph (Top 5 God Nodes + их соседи)
 
 ```mermaid
 graph TD
-    FileUploadController("FileUploadController")
-    FileStorageService["FileStorageService"]
-    CashbackController("CashbackController")
+    AbstractBotConversationService["AbstractBotConversationService"]
+    CashbackImportService["CashbackImportService"]
+    AiService["AiService"]
+    MaxConversationService["MaxConversationService"]
+    MaxBotService["MaxBotService"]
+    TelegramConversationService["TelegramConversationService"]
+    TelegramBotService["TelegramBotService"]
+    MaxWebhookController("MaxWebhookController")
+    TelegramWebhookController("TelegramWebhookController")
     CashbackService["CashbackService"]
+    CashbackController("CashbackController")
     SearchDataController("SearchDataController")
-    FileUploadController -->|DI| FileStorageService
+    AbstractBotConversationService -->|DI| CashbackImportService
+    CashbackImportService -->|DI| AiService
+    MaxConversationService -->|DI| MaxBotService
+    MaxConversationService -->|DI| CashbackImportService
+    TelegramConversationService -->|DI| TelegramBotService
+    TelegramConversationService -->|DI| CashbackImportService
+    MaxWebhookController -->|DI| MaxConversationService
+    TelegramWebhookController -->|DI| TelegramConversationService
+    CashbackImportService -.->|static| CashbackService
     CashbackController -.->|static| CashbackService
     SearchDataController -.->|static| CashbackService
     style CashbackService fill:#ffe066,stroke:#333,stroke-width:2px
+    style CashbackImportService fill:#ffe066,stroke:#333,stroke-width:2px
+    style MaxConversationService fill:#ffe066,stroke:#333,stroke-width:2px
+    style TelegramConversationService fill:#ffe066,stroke:#333,stroke-width:2px
     style CashbackController fill:#ffe066,stroke:#333,stroke-width:2px
-    style FileStorageService fill:#ffe066,stroke:#333,stroke-width:2px
-    style FileUploadController fill:#ffe066,stroke:#333,stroke-width:2px
-    style SearchDataController fill:#ffe066,stroke:#333,stroke-width:2px
 ```
 
 ## Graph Statistics
 
-- **Total Nodes:** 28
-- **Total Edges:** 6
-- **DI Edges:** 1 (constructor dependencies)
-- **Static Call Edges:** 5 (Service::method calls)
-- **Avg Edges per Node:** 0.21
+- **Total Nodes:** 34
+- **Total Edges:** 15
+- **DI Edges:** 9 (constructor dependencies)
+- **Static Call Edges:** 6 (Service::method calls)
+- **Avg Edges per Node:** 0.44
