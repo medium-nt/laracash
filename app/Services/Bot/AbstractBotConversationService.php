@@ -195,8 +195,8 @@ abstract class AbstractBotConversationService
                 if (! empty($state['last_bot_msg'])) {
                     $this->deleteMessage($chatId, $state['last_bot_msg']);
                 }
-                $this->setStateName($pid, 'await_confirm', ['items' => $items, 'last_bot_msg' => null]);
-                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items);
+                $this->setStateName($pid, 'await_confirm', ['items' => $items, 'last_bot_msg' => null, 'active' => $index]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items, $index);
             }
 
             return;
@@ -204,6 +204,41 @@ abstract class AbstractBotConversationService
 
         // Обработка состояний редактора (правка/добавление пункта)
         if ($state['name'] === 'await_edit' || $state['name'] === 'await_add') {
+            $index = $state['index'] ?? null;
+            $field = $state['field'] ?? null; // только для await_edit (новая схема полей)
+            $items = $state['items'] ?? [];
+
+            // Правка отдельного поля (Название / Процент) из развёрнутого пункта
+            if ($state['name'] === 'await_edit' && $field !== null && $index !== null && isset($items[$index])) {
+                if ($field === 'title') {
+                    $title = self::parseTitle($text);
+                    if ($title === null) {
+                        $this->sendTransient($pid, $chatId, 'Не понял название. Пришли слово или фразу, например «Аптеки».');
+
+                        return;
+                    }
+                    $items = $this->applyTitle($items, $index, $title, $user->id);
+                } else { // field === 'percent'
+                    $percent = self::parsePercent($text);
+                    if ($percent === null) {
+                        $this->sendTransient($pid, $chatId, 'Не понял процент. Пришли число, например «5» или «3,5».');
+
+                        return;
+                    }
+                    $items = $this->applyPercent($items, $index, $percent);
+                }
+
+                // Cleanup транзитного промпта правки; пункт остаётся развёрнут (active=index)
+                if (! empty($state['last_bot_msg'])) {
+                    $this->deleteMessage($chatId, $state['last_bot_msg']);
+                }
+                $this->setStateName($pid, 'await_confirm', ['items' => $items, 'last_bot_msg' => null, 'active' => $index]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $items, $index);
+
+                return;
+            }
+
+            // Legacy-путь: полная строка «название процент [mcc]» (await_add и await_edit без field)
             $parsed = self::parseItem($text);
 
             if ($parsed === null) {
@@ -216,9 +251,7 @@ abstract class AbstractBotConversationService
             $parsed = $this->attachCategory($parsed, $this->userCategories($user->id));
 
             // Применяем правку к items
-            $items = $state['items'] ?? [];
             if ($state['name'] === 'await_edit') {
-                $index = $state['index'] ?? null;
                 if ($index !== null && isset($items[$index])) {
                     // Если юзер не дописал примечание (mcc='') — сохраняем прежнее,
                     // иначе правка процента «Аптеки 7» затёрла бы уже заданный MCC.
@@ -324,11 +357,16 @@ abstract class AbstractBotConversationService
             return;
         }
 
-        // Обработка кнопок редактора
-        if (str_starts_with($data, 'edit:')) {
-            $index = (int) substr($data, 5);
-            $this->sendTransient($pid, $chatId, "Пришли «название процент» — можно дописать примечание через пробел.\n\nПримеры:\n• Аптеки 5\n• Аптеки 5 только 03\n• +Кафе 5 (отдельная категория)");
-            $this->setStateName($pid, 'await_edit', ['index' => $index]);
+        // Разворот/сворот пункта. edit:{i} — алиас cat:{i} для уже отправленных старых клавиатур.
+        if (str_starts_with($data, 'cat:') || str_starts_with($data, 'edit:')) {
+            $index = (int) substr($data, str_starts_with($data, 'edit:') ? 5 : 4);
+            $state = $this->state($pid);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $active = ($state['active'] ?? null) === $index ? null : $index;
+                $this->patchState($pid, ['active' => $active]);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items'], $active);
+            }
 
             return;
         }
@@ -339,8 +377,37 @@ abstract class AbstractBotConversationService
 
             if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
                 array_splice($state['items'], $index, 1);
+                $state['active'] = null; // после удаления индексы сместились — сбрасываем разворот
                 $this->setState($pid, 'await_confirm', $state);
-                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items']);
+                $this->renderEditor($chatId, $state['msg_id'] ?? null, $state['items'], null);
+            }
+
+            return;
+        }
+
+        // Правка названия пункта
+        if (str_starts_with($data, 'edt_t:')) {
+            $index = (int) substr($data, 6);
+            $state = $this->state($pid);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $title = e($state['items'][$index]['title'] ?? '');
+                $this->sendTransient($pid, $chatId, "Пришли новое название для «{$title}»:");
+                $this->setStateName($pid, 'await_edit', ['index' => $index, 'field' => 'title']);
+            }
+
+            return;
+        }
+
+        // Правка процента пункта
+        if (str_starts_with($data, 'edt_p:')) {
+            $index = (int) substr($data, 6);
+            $state = $this->state($pid);
+
+            if (($state['name'] ?? null) === 'await_confirm' && isset($state['items'][$index])) {
+                $title = e($state['items'][$index]['title'] ?? '');
+                $this->sendTransient($pid, $chatId, "Пришли новый процент для «{$title}» (например, 5 или 3,5):");
+                $this->setStateName($pid, 'await_edit', ['index' => $index, 'field' => 'percent']);
             }
 
             return;
@@ -785,9 +852,10 @@ abstract class AbstractBotConversationService
      * Формирует текст редактора с распознанными категориями (✅/🆕).
      *
      * @param  array  $items  Элементы [['title'=>string,'percent'=>float,'category_id'=>?int,'mcc'=>string], ...]
+     * @param  int|null  $active  Индекс развёрнутого пункта (под ним печатаются значения полей)
      * @return string Текст сообщения
      */
-    protected function buildEditorText(array $items): string
+    protected function buildEditorText(array $items, ?int $active = null): string
     {
         if (empty($items)) {
             return 'Список пуст. Нажми «➕ Добавить категорию».';
@@ -811,6 +879,17 @@ abstract class AbstractBotConversationService
             if (in_array($item['category_id'] ?? null, $dupIds, true)) {
                 $line .= ' ⚠️';
             }
+
+            // Под развёрнутым пунктом — значения полей (метка: значение). Активный пункт —
+            // жирным (<b>, привлекает внимание), подпункты — курсивом (<i>, второстепенны).
+            // Оба транспорта шлют HTML (TG parse_mode=HTML, MAX format=html) — теги работают везде.
+            if ($i === $active) {
+                $line = '<b>'.$line.'</b>';
+                $line .= "\n  ├ Название: ".e($item['title']);
+                $line .= "\n  ├ Процент: ".$item['percent'].'%';
+                $line .= "\n  └ Примечание: ".(! empty($item['mcc']) ? e($item['mcc']) : '(пусто)');
+            }
+
             $lines[] = $line;
         }
 
@@ -834,19 +913,26 @@ abstract class AbstractBotConversationService
     }
 
     /**
-     * Формирует inline-клавиатуру редактора в формате платформы.
+     * Формирует inline-клавиатуру редактора: каждая категория — одна широкая кнопка во весь ряд;
+     * активный (развёрнутый) пункт дополнительно раскрывает кнопки действий
+     * (Изменить название / Изменить процент / Примечание / Удалить / Свернуть). Значения полей
+     * при этом печатаются в тексте сообщения (см. buildEditorText), а не в лейблах кнопок.
      *
-     * @param  array  $items  Элементы редактора
+     * @param  array  $items  Элементы [['title'=>string,'percent'=>float,'category_id'=>?int,'mcc'=>string], ...]
+     * @param  int|null  $active  Индекс развёрнутого пункта (null — всё свёрнуто)
      * @return array Массив строк кнопок
      */
-    protected function buildEditorKeyboard(array $items): array
+    protected function buildEditorKeyboard(array $items, ?int $active = null): array
     {
         $keyboard = [];
 
-        // «Добавить категорию» — первой, чтобы всегда была под рукой
-        $keyboard[] = [$this->makeButton('➕ Добавить категорию', 'add')];
+        // «Добавить категорию» — первой, чтобы всегда была под рукой.
+        // Скрывается при проваливании в активный пункт (вместе с Сохранить/Заменить/Отменить),
+        // чтобы глобальные действия не создавали шум при редактировании поля.
+        if ($active === null) {
+            $keyboard[] = [$this->makeButton('➕ Добавить категорию', 'add')];
+        }
 
-        // Кнопки редактирования и удаления для каждого элемента
         foreach ($items as $i => $item) {
             $title = $item['title'] ?? '';
             $percent = $item['percent'] ?? 0;
@@ -858,20 +944,38 @@ abstract class AbstractBotConversationService
 
             // Маркер статуса: ✅ — существующая категория, 🆕 — новая (будет создана)
             $mark = empty($item['category_id']) ? '🆕' : '✅';
-            $editText = "{$mark} {$title} {$percent}%";
 
-            $keyboard[] = [
-                $this->makeButton($editText, 'edit:'.$i),
-                $this->makeButton('🗑', 'del:'.$i),
-                $this->makeButton('📝', 'note:'.$i),
-            ];
+            // Индикатор разворота: ▶ — свёрнуто, ▼ — развёрнуто
+            $arrow = ($i === $active) ? '▼' : '▶';
+
+            // Активная (развёрнутая) категория — ВЕРХНИМ регистром названия: визуальное выделение
+            // пункта, в который провалились (свёрнутые соседи — обычный регистр).
+            // inline-кнопки не поддерживают жирный/курсив, поэтому единственный канал — сам текст.
+            $displayTitle = ($i === $active) ? mb_strtoupper($title) : $title;
+
+            // Широкая кнопка-категория во весь ряд (тап → разворот/сворот)
+            $keyboard[] = [$this->makeButton("{$arrow} {$mark} ".e($displayTitle)." {$percent}%", 'cat:'.$i)];
+
+            // Развёрнутый пункт: только действия во всю ширину (каждая кнопка — один ряд,
+            // кроме последнего: Удалить + Свернуть делит ряд пополам). Значения полей — в тексте.
+            if ($i === $active) {
+                $keyboard[] = [$this->makeButton('✏️ Изменить название', 'edt_t:'.$i)];
+                $keyboard[] = [$this->makeButton('％ Изменить процент', 'edt_p:'.$i)];
+                $keyboard[] = [$this->makeButton('📝 Примечание', 'note:'.$i)];
+                $keyboard[] = [
+                    $this->makeButton('🗑 Удалить', 'del:'.$i),
+                    $this->makeButton('✖ Свернуть', 'cat:'.$i),
+                ];
+            }
         }
 
-        // Кнопки сохранения — каждая на всю ширину своей строки,
-        // чтобы текст был виден полностью (в строке кнопки делят ширину поровну).
-        $keyboard[] = [$this->makeButton('💾 Сохранить (добавить к старым)', 'merge')];
-        $keyboard[] = [$this->makeButton('♻️ Заменить (удалить старые)', 'replace')];
-        $keyboard[] = [$this->makeButton('Отменить', 'cancel')];
+        // Глобальные кнопки сохранения/отмены — только в свёрнутом состоянии (active=null).
+        // При проваливании в пункт убраны, чтобы не отвлекать; доступны после ✖ Свернуть.
+        if ($active === null) {
+            $keyboard[] = [$this->makeButton('💾 Сохранить (добавить к старым)', 'merge')];
+            $keyboard[] = [$this->makeButton('♻️ Заменить (удалить старые)', 'replace')];
+            $keyboard[] = [$this->makeButton('Отменить', 'cancel')];
+        }
 
         return $keyboard;
     }
@@ -966,6 +1070,79 @@ abstract class AbstractBotConversationService
         }
 
         return $parsed;
+    }
+
+    /**
+     * Парсит отдельное поле «название»: trim, без переносов/табов (ломают кнопку),
+     * обрезка до 255 символов. null — если пусто.
+     *
+     * @param  string  $text  Сырой ввод названия
+     * @return string|null Очищенное название либо null при пустом вводе
+     */
+    protected static function parseTitle(string $text): ?string
+    {
+        $title = trim(str_replace(["\r", "\n", "\t"], ' ', $text));
+
+        if ($title === '') {
+            return null;
+        }
+
+        return mb_substr($title, 0, 255);
+    }
+
+    /**
+     * Парсит отдельное поле «процент»: первое число в вводе, запятая→точка.
+     * null — если числа нет или > 100. 0 допустим (= «нет кешбэка», при сохранении пропускается).
+     *
+     * @param  string  $text  Сырой ввод процента
+     * @return float|null Процент либо null при отсутствии числа или значении > 100
+     */
+    protected static function parsePercent(string $text): ?float
+    {
+        if (preg_match('/(\d+(?:[.,]\d+)?)/', $text, $m)) {
+            $percent = (float) str_replace(',', '.', $m[1]);
+            if ($percent > 100) {
+                return null;
+            }
+
+            return $percent;
+        }
+
+        return null;
+    }
+
+    /**
+     * Применяет новое название к пункту и пересопоставляет категорию (название — ключ мэтчинга):
+     * обновляются title (каноничный) и category_id; маркер может смениться ✅↔🆕. Процент/MCC не трогаются.
+     *
+     * @param  array  $items  Текущие пункты редактора
+     * @param  int  $index  Индекс правимого пункта
+     * @param  string  $title  Новое название
+     * @param  int  $userId  ID пользователя (для загрузки категорий мэтчинга)
+     * @return array Обновлённые пункты
+     */
+    protected function applyTitle(array $items, int $index, string $title, int $userId): array
+    {
+        $resolved = $this->attachCategory(['title' => $title, 'force_new' => false], $this->userCategories($userId));
+        $items[$index]['title'] = $resolved['title'];
+        $items[$index]['category_id'] = $resolved['category_id'];
+
+        return $items;
+    }
+
+    /**
+     * Применяет новый процент к пункту. Категория и название не затрагиваются.
+     *
+     * @param  array  $items  Текущие пункты редактора
+     * @param  int  $index  Индекс правимого пункта
+     * @param  float  $percent  Новый процент
+     * @return array Обновлённые пункты
+     */
+    protected function applyPercent(array $items, int $index, float $percent): array
+    {
+        $items[$index]['percent'] = $percent;
+
+        return $items;
     }
 
     /**
@@ -1071,12 +1248,13 @@ abstract class AbstractBotConversationService
      * @param  int|string  $chatId  ID чата
      * @param  int|string|null  $msgId  ID сообщения редактора (null — отправить новое)
      * @param  array  $items  Элементы редактора
+     * @param  int|null  $active  Индекс развёрнутого пункта (null — свёрнуто)
      * @return int|string|null Message ID нового сообщения или null при edit
      */
-    protected function renderEditor(int|string $chatId, int|string|null $msgId, array $items): int|string|null
+    protected function renderEditor(int|string $chatId, int|string|null $msgId, array $items, ?int $active = null): int|string|null
     {
-        $text = $this->buildEditorText($items);
-        $keyboard = $this->buildEditorKeyboard($items);
+        $text = $this->buildEditorText($items, $active);
+        $keyboard = $this->buildEditorKeyboard($items, $active);
 
         if ($msgId !== null) {
             $this->editMessageText($chatId, $msgId, $text, $keyboard);

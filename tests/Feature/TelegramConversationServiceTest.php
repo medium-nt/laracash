@@ -388,7 +388,7 @@ test('callback del удаляет пункт', function () {
     });
 });
 
-test('callback edit переводит в await_edit', function () {
+test('callback edit работает как алиас cat (toggle active)', function () {
     $user = User::factory()->create(['telegram_id' => '42']);
 
     Cache::put('bot.state.42', [
@@ -411,11 +411,46 @@ test('callback edit переводит в await_edit', function () {
         ],
     ]);
 
-    // Проверяем, что состояние изменилось на await_edit
+    // edit:{i} теперь алиас cat:{i} — устанавливает active=i (развёрнут)
     $state = Cache::get('bot.state.42');
-    expect($state['name'])->toBe('await_edit')
-        ->and($state['index'])->toBe(0);
+    expect($state['name'])->toBe('await_confirm')
+        ->and($state['active'])->toBe(0);
 });
+
+test('edit alias with non-zero indices sets correct active (catch substr bug)', function (string $callbackData, int $expectedActive) {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 3 пунктами
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+            ['title' => 'Кино', 'percent' => 10.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    app(TelegramConversationService::class)->handle([
+        'callback_query' => [
+            'id' => 'cb_edit',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => $callbackData,
+        ],
+    ]);
+
+    // active должен быть равен индексу (НЕ 0 из-за бага substr)
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBe($expectedActive);
+})->with([
+    'edit:1' => ['edit:1', 1],
+    'edit:2' => ['edit:2', 2],
+]);
 
 test('сообщение в состоянии await_edit обновляет элемент', function () {
     $user = User::factory()->create(['telegram_id' => '42']);
@@ -1047,6 +1082,527 @@ test('callback merge сохраняет примечание items в pivot', fu
         ->and($cashback->mcc)->toBe('5912');
 });
 
+test('builds editor keyboard with one wide category row per item and global buttons', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Супермаркеты', 'percent' => 5.0, 'category_id' => 1, 'mcc' => ''],
+        ['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null, 'mcc' => ''],
+    ]);
+
+    // Первая строка — «Добавить категорию»
+    expect($kb[0][0]['text'])->toContain('Добавить категорию');
+    expect($kb[0][0]['callback_data'])->toBe('add');
+
+    // Каждый пункт — ОДНА кнопка в ряду, callback cat:{i}
+    // Найдём кнопки по callback_data
+    $flatButtons = collect($kb)->flatten(1)->keyBy('callback_data');
+
+    expect($flatButtons->has('cat:0'))->toBeTrue();
+    expect($flatButtons->get('cat:0')['text'])->toContain('Супермаркеты')->toContain('5%')->toContain('✅');
+
+    expect($flatButtons->has('cat:1'))->toBeTrue();
+    expect($flatButtons->get('cat:1')['text'])->toContain('Рестораны')->toContain('10%')->toContain('🆕');
+
+    // Хвостовые глобальные кнопки без изменений
+    expect($flatButtons->has('merge'))->toBeTrue();
+    expect($flatButtons->has('replace'))->toBeTrue();
+    expect($flatButtons->has('cancel'))->toBeTrue();
+
+    // MARKUP: Пункты свёрнуты (active=null) → все cat:{i} содержат ▶
+    expect($flatButtons->get('cat:0')['text'])->toContain('▶');
+    expect($flatButtons->get('cat:1')['text'])->toContain('▶');
+    // Свёрнутые пункты НЕ должны содержать ▼
+    expect($flatButtons->get('cat:0')['text'])->not->toContain('▼');
+    expect($flatButtons->get('cat:1')['text'])->not->toContain('▼');
+});
+
+test('expands the active item with field rows', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null, 'mcc' => ''],
+    ], 0);
+
+    $flatButtons = collect($kb)->flatten(1)->keyBy('callback_data');
+
+    expect($flatButtons->has('cat:0'))->toBeTrue();          // широкая кнопка активного пункта
+    expect($flatButtons->has('edt_t:0'))->toBeTrue();        // Название
+    expect($flatButtons->has('edt_p:0'))->toBeTrue();        // Процент
+    expect($flatButtons->has('note:0'))->toBeTrue();         // Примечание
+    expect($flatButtons->has('del:0'))->toBeTrue();         // Удалить (рядом со Свернуть)
+
+    // Последний ряд развёрнутого пункта — Удалить + Свернуть (2 кнопки), Свернуть = cat:0
+    // найти ряд, где есть del:0 — он же содержит cat:0 (Свернуть)
+    $delRow = array_values(array_filter($kb, fn ($r) => in_array('del:0', array_column($r, 'callback_data'), true)))[0];
+    expect(array_column($delRow, 'callback_data'))->toBe(['del:0', 'cat:0']);
+
+    // MARKUP: Широкая кнопка активного пункта (cat:0) содержит ▼ (не ▶)
+    // Ищем кнопку с title и процентом, а не кнопку Свернуть
+    $wideCatButton = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['callback_data'] ?? null) === 'cat:0' &&
+        str_contains($btn['text'] ?? '', mb_strtoupper('Рестораны')) &&
+        str_contains($btn['text'] ?? '', '10%')
+    );
+    expect($wideCatButton['text'])->toContain('▼');
+    expect($wideCatButton['text'])->not->toContain('▶');
+
+    // UPPER: активная категория — название в верхнем регистре (визуальное выделение)
+    expect($wideCatButton['text'])->toContain(mb_strtoupper('Рестораны'));
+
+    // MARKUP: Поля активного пункта — кнопки-действия с новыми лейблами (без префиксов)
+    expect($flatButtons->get('edt_t:0')['text'])->toBe('✏️ Изменить название');
+    expect($flatButtons->get('edt_p:0')['text'])->toBe('％ Изменить процент');
+    expect($flatButtons->get('note:0')['text'])->toBe('📝 Примечание');
+    expect($flatButtons->get('del:0')['text'])->toBe('🗑 Удалить');
+
+    // MARKUP: Кнопка Свернуть (cat:0) в последнем ряду содержит ✖
+    $collapseButton = collect($delRow)->first(fn ($btn) => ($btn['callback_data'] ?? null) === 'cat:0');
+    expect($collapseButton['text'])->toContain('✖');
+
+    // GLOBALS HIDDEN: при развёрнутом пункте глобальные действия убраны (не отвлекают)
+    expect($flatButtons->has('add'))->toBeFalse();
+    expect($flatButtons->has('merge'))->toBeFalse();
+    expect($flatButtons->has('replace'))->toBeFalse();
+    expect($flatButtons->has('cancel'))->toBeFalse();
+
+    // VALUES: значения полей развёрнутого пункта — в тексте сообщения (не в кнопках)
+    $textMethod = new ReflectionMethod($service, 'buildEditorText');
+    $text = $textMethod->invoke($service, [
+        ['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null, 'mcc' => ''],
+    ], 0);
+    expect($text)->toContain('Название: Рестораны');
+    expect($text)->toContain('Процент: 10%');
+    expect($text)->toContain('Примечание: (пусто)');
+
+    // FORMAT: активный пункт — жирным (<b>), подпункты — plain text с древовисными префиксами
+    expect($text)->toContain('<b>');
+    expect($text)->toContain('├ Название:');
+    expect($text)->toContain('├ Процент:');
+    expect($text)->toContain('└ Примечание:');
+});
+
+test('toggles active item via cat callback and collapses on second tap', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 2 пунктами и msg_id
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Первый тап — разворот пункта 1
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb1',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cat:1',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBe(1);
+
+    // Повторный тап по cat:1 — сворачивание
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb2',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cat:1',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBeNull();
+});
+
+test('resets active when deleting an item', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 2 пунктами, msg_id и active=1
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+        ],
+        'msg_id' => 1,
+        'active' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Удаляем пункт 1 (развёрнутый)
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_del',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'del:1',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBeNull();
+    expect($state['items'])->toHaveCount(1); // пункт удалён
+    expect($state['items'][0]['title'])->toBe('Аптеки');
+});
+
+test('edt_t callback enters await_edit with field=title and updates title with re-match', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Создаём категорию «Аптеки» для пользователя
+    \App\Models\Category::create([
+        'user_id' => $user->id,
+        'title' => 'Аптеки',
+        'keywords' => 'аптека',
+    ]);
+
+    // Подготовка: пользователь в await_confirm с пунктом «Рестораны» (category_id=null, 🆕)
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Рестораны', 'percent' => 10.0, 'category_id' => null]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Тап «Название» пункта 0
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_t',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_t:0',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit');
+    expect($state['index'])->toBe(0);
+    expect($state['field'])->toBe('title');
+
+    // Ввод нового названия «Аптеки» (существующая категория)
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'Аптеки',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm');
+    expect($state['active'])->toBe(0);                  // пункт остался развёрнут
+    expect($state['items'][0]['title'])->toBe('Аптеки');
+    expect($state['items'][0]['category_id'])->not->toBeNull(); // категория пересопоставлена → ✅
+});
+
+test('edt_p callback enters await_edit with field=percent and updates percent', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_p',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_p:0',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['field'])->toBe('percent');
+
+    // Процент с запятой нормализуется
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '3,5',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['items'][0]['percent'])->toBe(3.5);
+});
+
+test('edt_p callback parses integer percent correctly', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_p',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_p:0',
+        ],
+    ]);
+
+    // Целый процент
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '15',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['items'][0]['percent'])->toBe(15.0);
+});
+
+test('rejects invalid percent input and stays in await_edit', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_p',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_p:0',
+        ],
+    ]);
+
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'не число',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit'); // остались ждать корректного ввода
+});
+
+test('rejects invalid title input and stays in await_edit', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_edt_t',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'edt_t:0',
+        ],
+    ]);
+
+    // Пустой ввод
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => '   ',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_edit'); // остались ждать корректного ввода
+});
+
+test('await_note returns to await_confirm with the item expanded', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [['title' => 'Аптеки', 'percent' => 5.0]],
+        'msg_id' => 1,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // note:0 → await_note, index=0
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_note',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'note:0',
+        ],
+    ]);
+
+    $service->handle([
+        'message' => [
+            'chat' => ['id' => 100],
+            'from' => ['id' => 42],
+            'text' => 'MCC5812',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['name'])->toBe('await_confirm');
+    expect($state['active'])->toBe(0);                 // пункт развёрнут после правки примечания
+    expect($state['items'][0]['mcc'])->toBe('MCC5812');
+});
+
+test('switches active from one item to another (cat:j with j≠i)', function () {
+    Http::fake(['*api.telegram.org/*' => Http::response(['ok' => true], 200)]);
+    $user = User::factory()->create(['telegram_id' => '42']);
+
+    // Подготовка: пользователь в await_confirm с 3 пунктами, active=0 (развёрнут первый)
+    Cache::put('bot.state.42', [
+        'name' => 'await_confirm',
+        'card_id' => 123,
+        'raw' => [],
+        'image' => null,
+        'items' => [
+            ['title' => 'Аптеки', 'percent' => 5.0],
+            ['title' => 'Кафе', 'percent' => 3.0],
+            ['title' => 'Кино', 'percent' => 10.0],
+        ],
+        'msg_id' => 1,
+        'active' => 0,
+    ], now()->addSeconds(1800));
+
+    $service = app(TelegramConversationService::class);
+
+    // Тап по cat:2 → должен переключить active с 0 на 2
+    $service->handle([
+        'callback_query' => [
+            'id' => 'cb_switch',
+            'from' => ['id' => 42],
+            'message' => ['chat' => ['id' => 100]],
+            'data' => 'cat:2',
+        ],
+    ]);
+
+    $state = Cache::get('bot.state.42');
+    expect($state['active'])->toBe(2); // switched to item 2
+});
+
+test('collapsed items show ▶ and active item shows ▼ when multiple items exist', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+    $kb = $method->invoke($service, [
+        ['title' => 'Аптеки', 'percent' => 5.0, 'category_id' => 1, 'mcc' => ''],
+        ['title' => 'Кафе', 'percent' => 3.0, 'category_id' => null, 'mcc' => ''],
+        ['title' => 'Кино', 'percent' => 10.0, 'category_id' => 2, 'mcc' => ''],
+    ], 1); // active=1 (Кафе)
+
+    // MARKUP: Широкая кнопка активного пункта (кафе, i=1) содержит ▼
+    $wideCatButton1 = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['callback_data'] ?? null) === 'cat:1' &&
+        str_contains($btn['text'] ?? '', mb_strtoupper('Кафе')) &&
+        str_contains($btn['text'] ?? '', '3%')
+    );
+    expect($wideCatButton1['text'])->toContain('▼');
+    expect($wideCatButton1['text'])->not->toContain('▶');
+
+    // UPPER: активная категория — название в верхнем регистре (визуальное выделение)
+    expect($wideCatButton1['text'])->toContain(mb_strtoupper('Кафе'));
+
+    // MARKUP: Свёрнутые пункты (Аптеки i=0, Кино i=2) содержат ▶
+    $wideCatButton0 = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['callback_data'] ?? null) === 'cat:0' &&
+        str_contains($btn['text'] ?? '', 'Аптеки') &&
+        str_contains($btn['text'] ?? '', '5%')
+    );
+    expect($wideCatButton0['text'])->toContain('▶');
+    expect($wideCatButton0['text'])->not->toContain('▼');
+
+    $wideCatButton2 = collect($kb)->flatten(1)->first(fn ($btn) => ($btn['callback_data'] ?? null) === 'cat:2' &&
+        str_contains($btn['text'] ?? '', 'Кино') &&
+        str_contains($btn['text'] ?? '', '10%')
+    );
+    expect($wideCatButton2['text'])->toContain('▶');
+    expect($wideCatButton2['text'])->not->toContain('▼');
+});
+
+test('truncates long title in button label to 30 chars with ellipsis', function () {
+    $service = app(TelegramConversationService::class);
+    $method = new ReflectionMethod($service, 'buildEditorKeyboard');
+
+    // Title длиннее 30 символов (40 символов)
+    $longTitle = 'Очень длинное название категории которое должно быть обрезано';
+    $kb = $method->invoke($service, [
+        ['title' => $longTitle, 'percent' => 5.0, 'category_id' => 1],
+    ]);
+
+    // Находим кнопку cat:0
+    $flatButtons = collect($kb)->flatten(1)->keyBy('callback_data');
+    $buttonText = $flatButtons->get('cat:0')['text'];
+
+    // Проверяем наличие "…" в тексте кнопки
+    expect($buttonText)->toContain('…');
+
+    // Извлекаем title-часть (between mark and percent)
+    preg_match('/^(?:▶|▼)\s*✅\s*(.+?)\s+5%$/', $buttonText, $matches);
+    $titleInButton = $matches[1] ?? '';
+
+    // Длина title в кнопке должна быть ≤ 31 (30 + "…" уже учтена в тексте)
+    expect(mb_strlen($titleInButton))->toBeLessThanOrEqual(31);
+});
 test('/start генерирует search_token и отправляет меню с URL-кнопкой', function () {
     URL::forceRootUrl('https://example.com');
 
