@@ -281,14 +281,11 @@ abstract class AbstractBotConversationService
             return;
         }
 
-        // «Прислать ссылку»: персональный URL просмотра кешбэка — текстом,
-        // + дублируем URL-кнопкой для прямого открытия (только для публичного URL).
+        // «Мои кешбэки»: персональный URL просмотра кешбэка — текстом
+        // (текстовый URL мессенджеры кликабелят всегда, в отличие от URL-кнопок).
         if ($data === 'cmd:link') {
             $url = $this->cashbackUrl($user);
-            $keyboard = $this->isPublicUrl($url)
-                ? [[$this->makeUrlButton('📂 Открыть', $url)]]
-                : [];
-            $this->sendTransient($pid, $chatId, "🔗 Твоя персональная ссылка на кешбэки:\n{$url}", $keyboard);
+            $this->sendTransient($pid, $chatId, "🔗 Твоя персональная ссылка на кешбэки:\n{$url}");
 
             return;
         }
@@ -696,38 +693,6 @@ abstract class AbstractBotConversationService
     }
 
     /**
-     * Годится ли URL для inline URL-кнопки (Telegram/MAX валидируют host серверсайд).
-     *
-     * Локальные и private-адреса (localhost, 127.*, 10.*, 192.168.*, 169.254.*, ::1,
-     * *.test/*.local/*.localhost) Telegram отвергает → BUTTON_URL_INVALID → падает весь
-     * sendMessage. Поэтому на dev URL-кнопку не подставляем (см. sendMenu / cmd:link),
-     * оставляя только callback «Прислать ссылку» — текстовый URL боты пропускают.
-     *
-     * @param  string  $url  Абсолютный URL
-     */
-    private function isPublicUrl(string $url): bool
-    {
-        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-
-        if ($host === '') {
-            return false;
-        }
-
-        $local = $host === 'localhost'
-            || $host === '::1'
-            || str_starts_with($host, '127.')
-            || str_starts_with($host, '10.')
-            || str_starts_with($host, '192.168.')
-            || str_starts_with($host, '169.254.')
-            || preg_match('/^172\.(1[6-9]|2\d|3[01])\./', $host) // 172.16.0.0/12 — Docker bridge, корпсети
-            || str_ends_with($host, '.localhost')
-            || str_ends_with($host, '.test')
-            || str_ends_with($host, '.local');
-
-        return ! $local;
-    }
-
-    /**
      * Отправка меню с приветствием и кнопкой «Обновить кешбэк».
      *
      * @param  int|string  $chatId  ID чата
@@ -737,16 +702,10 @@ abstract class AbstractBotConversationService
     {
         $pid = $this->platformUserId($user);
         $count = Card::where('user_id', $user->id)->count();
-        $url = $this->cashbackUrl($user);
         $keyboard = [
             [$this->makeButton('Обновить кешбэк', 'cmd:update')],
+            [$this->makeButton('🔗 Мои кешбэки', 'cmd:link')],
         ];
-        // URL-кнопку прямого открытия — только для публичного URL; локальные адреса
-        // Telegram/MAX отвергают (BUTTON_URL_INVALID → падает весь sendMessage).
-        if ($this->isPublicUrl($url)) {
-            $keyboard[] = [$this->makeUrlButton('📂 Мои кешбэки', $url)];
-        }
-        $keyboard[] = [$this->makeButton('🔗 Прислать ссылку', 'cmd:link')];
 
         $this->sendTransient($pid, $chatId, 'Привет, '.e($user->name)."! Карт: {$count}.", $keyboard);
         $this->setStateName($pid, 'idle');
@@ -1191,15 +1150,6 @@ abstract class AbstractBotConversationService
      * @return array TG: ['text'=>..,'callback_data'=>..]; MAX: ['type'=>'callback','text'=>..,'payload'=>..]
      */
     abstract protected function makeButton(string $text, string $data): array;
-
-    /**
-     * Формирует inline URL-кнопку (открывает ссылку) в формате платформы.
-     *
-     * @param  string  $text  Текст кнопки
-     * @param  string  $url  URL, который откроется при нажатии
-     * @return array TG: ['text'=>..,'url'=>..]; MAX: ['type'=>'link','text'=>..,'url'=>..]
-     */
-    abstract protected function makeUrlButton(string $text, string $url): array;
 
     /**
      * Извлекает chat id из update.
