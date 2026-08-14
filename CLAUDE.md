@@ -557,3 +557,31 @@ it('has emails', function (string $email) {
 - Every change must be programmatically tested. Write a new test or update an existing test, then run the affected tests to make sure they pass.
 - Run the minimum number of tests needed to ensure code quality and speed. Use `php artisan test` with a specific filename or filter.
 </laravel-boost-guidelines>
+## Project Wiki System
+
+Wiki system for automatic documentation generation and maintenance.
+
+### Structure
+- docs/wiki/INDEX.md — Auto-generated project index (injected at session start)
+- docs/wiki/maps/*.md — Auto-generated maps (models, services, controllers, dependencies)
+- docs/wiki/topics/*.md — Business logic documentation (manually maintained by AI)
+- docs/wiki/log.md — Append-only changelog
+- docs/wiki/adr/*.md — Architecture Decision Records (Tier 3 решения: Контекст/Решение/Альтернативы/Последствия)
+
+### Commands
+- php artisan wiki:generate — Generate/update wiki maps (auto-runs on session end via hooks)
+- php artisan wiki:generate --diff — Show changes since last generation
+
+### Usage
+1. After business logic changes → Call Agent(subagent_type="wiki-maintainer") with change description
+2. Agent updates relevant topic files + adds log entry
+3. SessionEnd hook auto-runs wiki:generate to update maps
+
+### Agent
+The wiki-maintainer agent (global) handles topic updates following ingest principle:
+- One change can affect multiple topics
+- Always updates Last reviewed date
+- Preserves section structure
+- Updates cross-references
+
+See .claude/agents/wiki-maintainer.md for full agent documentation.
