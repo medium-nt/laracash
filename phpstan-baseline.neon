@@ -1,0 +1,631 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Call to an undefined method ReflectionType\:\:getName\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Console/Commands/GenerateWikiMaps.php
+
+		-
+			message: '#^Call to an undefined method ReflectionType\:\:isBuiltin\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Console/Commands/GenerateWikiMaps.php
+
+		-
+			message: '#^Dead catch \- Throwable is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Console/Commands/GenerateWikiMaps.php
+
+		-
+			message: '#^Offset 1 on array\{list\<string\>, list\<non\-empty\-string\>\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Console/Commands/GenerateWikiMaps.php
+
+		-
+			message: '#^While loop condition is always true\.$#'
+			identifier: while.alwaysTrue
+			count: 1
+			path: app/Console/Commands/MaxPollCommand.php
+
+		-
+			message: '#^While loop condition is always true\.$#'
+			identifier: while.alwaysTrue
+			count: 1
+			path: app/Console/Commands/TelegramPollCommand.php
+
+		-
+			message: '#^Comparison operation "\<" between int\<1, max\> and 1 is always false\.$#'
+			identifier: smaller.alwaysFalse
+			count: 1
+			path: app/Console/Commands/TelegramSetWebhookCommand.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\User\:\:create\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/Auth/RegisterController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/BankController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Http/Controllers/BankController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\BankController\:\:create\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/BankController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\BankController\:\:edit\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/BankController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\BankController\:\:index\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/BankController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\BotLinkController\:\:show\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/BotLinkController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$bank_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$card_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$color\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$number\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$number_categories\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 5
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Card\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\CardController\:\:create\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\CardController\:\:edit\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\CardController\:\:index\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/CardController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$bank\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$cashback_image\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$cashback_json\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$number\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$card_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$category_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$is_check\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$percent\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\AvailableAllCashback\:\:updateOrCreate\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\AvailableAllCashback\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 2
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\AvailableAllCashback\:\:whereIn\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Card\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Cashback\:\:whereIn\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/CashbackController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/CategoryController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$category_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/CategoryController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Http\\Request\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/CategoryController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Http/Controllers/CategoryController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Category\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 2
+			path: app/Http/Controllers/CategoryController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:id\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Http/Controllers/HomeController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Http/Controllers/HomeController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Bank\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/HomeController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Card\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/HomeController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Category\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/HomeController.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\User\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Http/Controllers/LandingController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\MaxLinkController\:\:show\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/MaxLinkController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/SearchDataController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/UsersController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$password\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/UsersController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Http/Controllers/UsersController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: app/Livewire/CategorySearchComponent.php
+
+		-
+			message: '#^Method App\\Livewire\\CategorySearchComponent\:\:render\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Livewire/CategorySearchComponent.php
+
+		-
+			message: '#^Method App\\Livewire\\SearchComponent\:\:render\(\) should return Illuminate\\View\\View but returns Illuminate\\Contracts\\View\\View\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Livewire/SearchComponent.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$role\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Bank\:\:\$user_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Policies/BankPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Policies/BankPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$user_id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Policies/CardPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Policies/CardPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$user_id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Policies/CategoryPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Policies/CategoryPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$role\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Policies/UserPolicy.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$role\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Providers/AppServiceProvider.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$cashback_json\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AiService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$user_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AiService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$keywords\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/AiService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Services/AiService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$number\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 9
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$search_token\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Card\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 3
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Cashback\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\User\:\:where\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Method App\\Services\\Bot\\AbstractBotConversationService\:\:userCategories\(\) should return Illuminate\\Support\\Collection\<int, App\\Models\\Category\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>title" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Variable \$items in empty\(\) always exists and is not falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: app/Services/Bot/AbstractBotConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$cashback_json\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/CashbackImportService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/CashbackImportService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 4
+			path: app/Services/Bot/CashbackImportService.php
+
+		-
+			message: '#^Call to an undefined static method App\\Models\\Category\:\:create\(\)\.$#'
+			identifier: staticMethod.notFound
+			count: 1
+			path: app/Services/Bot/CashbackImportService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$max_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/MaxConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\User\:\:\$telegram_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/Bot/TelegramConversationService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$bank\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 11
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Card\:\:\$number\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 16
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$is_important\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Services/CashbackService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$keywords\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CategoryMatcher.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 5
+			path: app/Services/CategoryMatcher.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$is_important\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CategoryService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$keywords\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CategoryService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CategoryService.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Category\:\:\$user_id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Services/CategoryService.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Contracts\\Auth\\Factory\:\:user\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Services/CategoryService.php
